@@ -632,7 +632,7 @@ function ruToUkVariants(name) {
 async function nominatimSearch(query, countrycodes = 'ru,ua') {
   try {
     const cc = countrycodes ? `&countrycodes=${countrycodes}` : '';
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=ru,uk,en${cc}`;
+    const base = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=ru,uk,en${cc}`; const url = `https://corsproxy.io/?${encodeURIComponent(base)}`;
     const res = await fetch(url, { headers: { 'User-Agent': 'GruzPotok/1.0' } });
     const data = await res.json();
     if (data && data.length > 0) return { coords: [parseFloat(data[0].lat), parseFloat(data[0].lon)], displayName: data[0].display_name };
@@ -687,16 +687,6 @@ async function geocodeAddress(address) {
 
   const parts = address.split(',').map(s => s.trim()).filter(Boolean);
   const firstName = parts[0].replace(/^(село|с\.|хутор|х\.|посёлок|п\.|пгт|пос\.)\s*/i,'').trim().toLowerCase();
-
-  // 0. Яндекс первым — самый быстрый и точный для СНГ
-  if (CFG.yandexKey) {
-    const yResult = await yandexSearch(address);
-    if (yResult) {
-      geocodeCache[key] = yResult;
-      try { localStorage.setItem('gc_' + key, JSON.stringify(yResult)); } catch(e) {}
-      return yResult;
-    }
-  }
 
   // 1. Проверяем базу известных координат (ручные + прошитые)
   const manualSaved = JSON.parse(localStorage.getItem('gp_manual_coords') || '{}');

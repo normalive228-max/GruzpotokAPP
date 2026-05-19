@@ -688,6 +688,16 @@ async function geocodeAddress(address) {
   const parts = address.split(',').map(s => s.trim()).filter(Boolean);
   const firstName = parts[0].replace(/^(село|с\.|хутор|х\.|посёлок|п\.|пгт|пос\.)\s*/i,'').trim().toLowerCase();
 
+  // 0. Яндекс первым — самый быстрый и точный для СНГ
+  if (CFG.yandexKey) {
+    const yResult = await yandexSearch(address);
+    if (yResult) {
+      geocodeCache[key] = yResult;
+      try { localStorage.setItem('gc_' + key, JSON.stringify(yResult)); } catch(e) {}
+      return yResult;
+    }
+  }
+
   // 1. Проверяем базу известных координат (ручные + прошитые)
   const manualSaved = JSON.parse(localStorage.getItem('gp_manual_coords') || '{}');
   const allKnown = { ...KNOWN_COORDS, ...manualSaved };
@@ -1078,6 +1088,8 @@ async function syncOrders() {
             date: apiOrder.load_date || new Date().toLocaleDateString('ru', {day:'2-digit',month:'2-digit'})
           };
           orders.unshift(order);
+          // Геокодируем сразу при добавлении (в фоне)
+          if (order.from) geocodeAddress(order.from).catch(()=>{});
           added++;
           if (apiOrder.id > (CFG.lastBotOrderId || 0)) CFG.lastBotOrderId = apiOrder.id;
         }
@@ -1573,9 +1585,15 @@ async function _renderMapAsync(){
   ind.classList.add('show');
 
   // Геокодируем все адреса
-  const geocoded = await Promise.all(data.map(async o=>({
-    o, fg: await geocodeAddress(o.from)
-  })));
+  // Параллельное геокодирование всех адресов одновременно
+  const geocoded = await Promise.all(data.map(async o => {
+    try {
+      const fg = await geocodeAddress(o.from);
+      return { o, fg };
+    } catch(e) {
+      return { o, fg: null };
+    }
+  }));
   ind.classList.remove('show');
 
   // Группируем заявки по координатам погрузки (округляем до 4 знаков = ~11м)

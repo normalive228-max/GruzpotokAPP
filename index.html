@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0047)https://moonlit-brigadeiros-3713ce.netlify.app/ -->
+<!-- saved from url=(0048)https://normalive228-max.github.io/GruzpotokAPP/ -->
 <html lang="ru"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -12,9 +12,9 @@
 <title>ГрузПоток</title>
 <link rel="manifest" href="https://moonlit-brigadeiros-3713ce.netlify.app/manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com/">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="./ГрузПоток_files/css2" rel="stylesheet">
+<link rel="stylesheet" href="./ГрузПоток_files/leaflet.css">
+<script src="./ГрузПоток_files/leaflet.js"></script>
 <style>
 :root {
   --bg:#0f1923;--bg2:#162030;--bg3:#1e2d40;
@@ -154,7 +154,7 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
 .parse-preview .pf{margin-bottom:4px;color:var(--text2)}.parse-preview .pf strong{color:var(--text)}
 </style>
 </head>
-<body>
+<body class="">
 <div id="splash" style="opacity: 0; display: none;">
   <h1>ГрузПоток</h1>
   <p>УПРАВЛЕНИЕ ПЕРЕВОЗКАМИ</p>
@@ -164,14 +164,14 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
   <header>
     <div class="logo">ГрузПоток</div>
     <div class="hright">
-      <span class="cbadge" id="cbadge">2 заявок</span>
+      <span class="cbadge" id="cbadge">9 заявок</span>
       <button class="sync-btn" id="syncbtn" onclick="syncOrders()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6M23 20v-6h-6"></path><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg> Синхронизировать</button>
       <button onclick="openSettings()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;padding:4px">⚙️</button>
     </div>
   </header>
   <div class="tabs">
-    <div class="tab" id="tab-list" onclick="switchTab(&#39;list&#39;)">📋 Заявки</div>
-    <div class="tab active" id="tab-map" onclick="switchTab(&#39;map&#39;)">🗺 Карта</div>
+    <div class="tab active" id="tab-list" onclick="switchTab(&#39;list&#39;)">📋 Заявки</div>
+    <div class="tab" id="tab-map" onclick="switchTab(&#39;map&#39;)">🗺 Карта</div>
   </div>
   <div class="filters">
     <div class="sw"><span class="si">🔍</span><input type="text" id="fsearch" placeholder="Маршрут, город..." oninput="renderOrders()"></div>
@@ -179,7 +179,7 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
       <option value="">Все грузы</option>
       <option>Пшеница</option><option>Щебень</option><option>Песок</option><option>Кукуруза</option><option>Уголь</option>
     </select>
-    <select id="fregion" onchange="renderOrders()"><option value="">Все регионы</option><option value="Лопатино">Лопатино</option><option value="хутор Носовский">хутор Носовский</option></select>
+    <select id="fregion" onchange="renderOrders()"><option value="">Все регионы</option><option value="Верхний рогачик">Верхний рогачик</option><option value="Давыдовка">Давыдовка</option><option value="Ильинка">Ильинка</option><option value="Лопатино">Лопатино</option><option value="Сараи">Сараи</option><option value="с. Барятино">с. Барятино</option><option value="с. Долматовка">с. Долматовка</option><option value="с. Любимовка">с. Любимовка</option><option value="хутор Носовский">хутор Носовский</option></select>
     <select id="fstatus" onchange="renderOrders()">
       <option value="">Все статусы</option>
       <option value="new">Новые</option><option value="taken">Взятые</option><option value="done">Выполненные</option>
@@ -189,20 +189,260 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
     </select>
   </div>
   <div class="sbar">
-    <div class="si2"><div class="sv" id="st">2</div><div class="sl">заявок</div></div>
-    <div class="si2"><div class="sv" id="stons">1400 т</div><div class="sl">тоннаж</div></div>
-    <div class="si2"><div class="sv" id="sprice">2&nbsp;850₽</div><div class="sl">ср. цена/т</div></div>
+    <div class="si2"><div class="sv" id="st">9</div><div class="sl">заявок</div></div>
+    <div class="si2"><div class="sv" id="stons">5670 т</div><div class="sl">тоннаж</div></div>
+    <div class="si2"><div class="sv" id="sprice">1&nbsp;983₽</div><div class="sl">ср. цена/т</div></div>
     <div class="si2"><div class="sv" id="surg">0</div><div class="sl">срочных</div></div>
   </div>
   <div id="content">
-    <div id="list-view" style="display: none;">
+    <div id="list-view" style="display: flex;">
+    <div class="card">
+      <div class="ctop">
+        <div class="route">с. Долматовка <span>→</span> Севастополь</div>
+        <div class="badges">
+          
+          <span class="badge bg">Ячмень</span>
+          <span id="mapstatus_1779198063162.0615" title="Найдено на карте" style="font-size: 13px; font-weight: 700; color: var(--green); padding: 2px 5px; border-radius: 4px; background: transparent;">✓</span>
+        </div>
+      </div>
+      <div class="card-fields">
+        <div class="cf-row"><span class="cf-label">Культура:</span><span class="cf-val">Ячмень</span></div>
+        <div class="cf-row"><span class="cf-label">Объём:</span><span class="cf-val">500 тонн</span></div>
+        <div class="cf-row"><span class="cf-label">Место погрузки:</span><span class="cf-val">с. Долматовка, Херсонская обл.</span></div>
+        <div class="cf-row"><span class="cf-label">Место выгрузки:</span><span class="cf-val">Севастополь</span></div>
+        <div class="cf-row"><span class="cf-label">Расстояние:</span><span class="cf-val">400 км</span></div>
+        <div class="cf-row"><span class="cf-label">Ставка:</span><span class="cf-val hl">1&nbsp;300₽/т без НДС</span></div>
+        
+        
+        
+        <div class="cf-row"><span class="cf-label">Контакт:</span><span class="cf-val">📞 89184848108 Евгений</span></div>
+      </div>
+      <div class="cfoot">
+        <span class="csrc">Telegram AI Агент</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="sbtn sn" onclick="toggleStatus(1779198063162.0615)">Новая</button>
+          <button onclick="deleteOrder(1779198063162.0615)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
+        </div>
+      </div>
+      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779198063162.0615,this.value)"></div>
+    </div>
+    <div class="card">
+      <div class="ctop">
+        <div class="route">с. Любимовка <span>→</span> Азов</div>
+        <div class="badges">
+          
+          <span class="badge bg">пшеница</span>
+          <span id="mapstatus_1779198063162.5642" title="Найдено на карте" style="font-size: 13px; font-weight: 700; color: var(--green); padding: 2px 5px; border-radius: 4px; background: transparent;">✓</span>
+        </div>
+      </div>
+      <div class="card-fields">
+        <div class="cf-row"><span class="cf-label">Культура:</span><span class="cf-val">пшеница</span></div>
+        <div class="cf-row"><span class="cf-label">Объём:</span><span class="cf-val">180 тонн</span></div>
+        <div class="cf-row"><span class="cf-label">Место погрузки:</span><span class="cf-val">с. Любимовка, Васильевский район, Запорожская область</span></div>
+        <div class="cf-row"><span class="cf-label">Место выгрузки:</span><span class="cf-val">Азов, Промка</span></div>
+        <div class="cf-row"><span class="cf-label">Расстояние:</span><span class="cf-val">410 км</span></div>
+        <div class="cf-row"><span class="cf-label">Ставка:</span><span class="cf-val hl">1&nbsp;800₽/т без НДС</span></div>
+        
+        
+        
+        
+      </div>
+      <div class="cfoot">
+        <span class="csrc">Telegram AI Агент</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="sbtn sn" onclick="toggleStatus(1779198063162.5642)">Новая</button>
+          <button onclick="deleteOrder(1779198063162.5642)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
+        </div>
+      </div>
+      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779198063162.5642,this.value)"></div>
+    </div>
+    <div class="card">
+      <div class="ctop">
+        <div class="route">Давыдовка <span>→</span> Ростов</div>
+        <div class="badges">
+          
+          <span class="badge bg">пшеница</span>
+          <span id="mapstatus_1779198063162.9707" title="Найдено на карте" style="font-size: 13px; font-weight: 700; color: var(--green); padding: 2px 5px; border-radius: 4px; background: transparent;">✓</span>
+        </div>
+      </div>
+      <div class="card-fields">
+        <div class="cf-row"><span class="cf-label">Культура:</span><span class="cf-val">пшеница</span></div>
+        <div class="cf-row"><span class="cf-label">Объём:</span><span class="cf-val">300 тонн</span></div>
+        <div class="cf-row"><span class="cf-label">Место погрузки:</span><span class="cf-val">Давыдовка, Мелитопольский район, Запорожская область</span></div>
+        <div class="cf-row"><span class="cf-label">Место выгрузки:</span><span class="cf-val">Ростов, РЗТ</span></div>
+        <div class="cf-row"><span class="cf-label">Расстояние:</span><span class="cf-val">420 км</span></div>
+        <div class="cf-row"><span class="cf-label">Ставка:</span><span class="cf-val hl">1&nbsp;650₽/т без НДС</span></div>
+        
+        
+        
+        
+      </div>
+      <div class="cfoot">
+        <span class="csrc">Telegram AI Агент</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="sbtn sn" onclick="toggleStatus(1779198063162.9707)">Новая</button>
+          <button onclick="deleteOrder(1779198063162.9707)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
+        </div>
+      </div>
+      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779198063162.9707,this.value)"></div>
+    </div>
+    <div class="card">
+      <div class="ctop">
+        <div class="route">Верхний рогачик <span>→</span> Ростов</div>
+        <div class="badges">
+          
+          <span class="badge bg">пшеница</span>
+          <span id="mapstatus_1779198063162.0212" title="Не найдено на карте" style="font-size: 13px; font-weight: 700; color: var(--red); padding: 2px 5px; border-radius: 4px; background: transparent;">✗</span>
+        </div>
+      </div>
+      <div class="card-fields">
+        <div class="cf-row"><span class="cf-label">Культура:</span><span class="cf-val">пшеница</span></div>
+        <div class="cf-row"><span class="cf-label">Объём:</span><span class="cf-val">290 тонн</span></div>
+        <div class="cf-row"><span class="cf-label">Место погрузки:</span><span class="cf-val">Верхний рогачик, Верхнерогачинский м.о., Херсонская область</span></div>
+        <div class="cf-row"><span class="cf-label">Место выгрузки:</span><span class="cf-val">Ростов, РЗТ</span></div>
+        <div class="cf-row"><span class="cf-label">Расстояние:</span><span class="cf-val">500 км</span></div>
+        <div class="cf-row"><span class="cf-label">Ставка:</span><span class="cf-val hl">1&nbsp;800₽/т без НДС</span></div>
+        
+        
+        
+        
+      </div>
+      <div class="cfoot">
+        <span class="csrc">Telegram AI Агент</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="sbtn sn" onclick="toggleStatus(1779198063162.0212)">Новая</button>
+          <button onclick="deleteOrder(1779198063162.0212)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
+        </div>
+      </div>
+      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779198063162.0212,this.value)"></div>
+    </div>
+    <div class="card">
+      <div class="ctop">
+        <div class="route">Сараи <span>→</span> Касторное</div>
+        <div class="badges">
+          
+          <span class="badge bgr">Соя</span>
+          <span id="mapstatus_1779198063162.0527" title="Не найдено на карте" style="font-size: 13px; font-weight: 700; color: var(--red); padding: 2px 5px; border-radius: 4px; background: transparent;">✗</span>
+        </div>
+      </div>
+      <div class="card-fields">
+        <div class="cf-row"><span class="cf-label">Культура:</span><span class="cf-val">Соя</span></div>
+        <div class="cf-row"><span class="cf-label">Объём:</span><span class="cf-val">500 тонн</span></div>
+        <div class="cf-row"><span class="cf-label">Место погрузки:</span><span class="cf-val">Сараи, Сараевский р-н, Рязанская обл.</span></div>
+        <div class="cf-row"><span class="cf-label">Место выгрузки:</span><span class="cf-val">Касторное, КУРСКАГРОТЕРМИНАЛ</span></div>
+        <div class="cf-row"><span class="cf-label">Расстояние:</span><span class="cf-val">450 км</span></div>
+        <div class="cf-row"><span class="cf-label">Ставка:</span><span class="cf-val hl">1&nbsp;350₽/т без НДС</span></div>
+        
+        
+        
+        
+      </div>
+      <div class="cfoot">
+        <span class="csrc">Telegram AI Агент</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="sbtn sn" onclick="toggleStatus(1779198063162.0527)">Новая</button>
+          <button onclick="deleteOrder(1779198063162.0527)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
+        </div>
+      </div>
+      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779198063162.0527,this.value)"></div>
+    </div>
+    <div class="card">
+      <div class="ctop">
+        <div class="route">Ильинка <span>→</span> Ростов</div>
+        <div class="badges">
+          
+          <span class="badge bg">Пшеница</span>
+          <span id="mapstatus_1779198063161.8381" title="Не найдено на карте" style="font-size: 13px; font-weight: 700; color: var(--red); padding: 2px 5px; border-radius: 4px; background: transparent;">✗</span>
+        </div>
+      </div>
+      <div class="card-fields">
+        <div class="cf-row"><span class="cf-label">Культура:</span><span class="cf-val">Пшеница</span></div>
+        <div class="cf-row"><span class="cf-label">Объём:</span><span class="cf-val">300 тонн</span></div>
+        <div class="cf-row"><span class="cf-label">Место погрузки:</span><span class="cf-val">Ильинка, Калачаевский р-н, Воронежская обл.</span></div>
+        <div class="cf-row"><span class="cf-label">Место выгрузки:</span><span class="cf-val">Ростов, Астон</span></div>
+        <div class="cf-row"><span class="cf-label">Расстояние:</span><span class="cf-val">480 км</span></div>
+        <div class="cf-row"><span class="cf-label">Ставка:</span><span class="cf-val hl">1&nbsp;700₽/т без НДС</span></div>
+        
+        
+        
+        
+      </div>
+      <div class="cfoot">
+        <span class="csrc">Telegram AI Агент</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="sbtn sn" onclick="toggleStatus(1779198063161.8381)">Новая</button>
+          <button onclick="deleteOrder(1779198063161.8381)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
+        </div>
+      </div>
+      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779198063161.8381,this.value)"></div>
+    </div>
+    <div class="card">
+      <div class="ctop">
+        <div class="route">с. Барятино <span>→</span> Азов</div>
+        <div class="badges">
+          
+          <span class="badge bc">Кукуруза</span>
+          <span id="mapstatus_1779198063161.9775" title="Не найдено на карте" style="font-size: 13px; font-weight: 700; color: var(--red); padding: 2px 5px; border-radius: 4px; background: transparent;">✗</span>
+        </div>
+      </div>
+      <div class="card-fields">
+        <div class="cf-row"><span class="cf-label">Культура:</span><span class="cf-val">Кукуруза</span></div>
+        <div class="cf-row"><span class="cf-label">Объём:</span><span class="cf-val">2200 тонн</span></div>
+        <div class="cf-row"><span class="cf-label">Место погрузки:</span><span class="cf-val">с. Барятино, Данковский р-н, Липецкая обл.</span></div>
+        <div class="cf-row"><span class="cf-label">Место выгрузки:</span><span class="cf-val">Азов, Финочка склад</span></div>
+        <div class="cf-row"><span class="cf-label">Расстояние:</span><span class="cf-val">850 км</span></div>
+        <div class="cf-row"><span class="cf-label">Ставка:</span><span class="cf-val hl">2&nbsp;550₽/т без НДС</span></div>
+        
+        
+        
+        <div class="cf-row"><span class="cf-label">Контакт:</span><span class="cf-val">📞 89184848108 Евгений</span></div>
+      </div>
+      <div class="cfoot">
+        <span class="csrc">Telegram AI Агент</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="sbtn sn" onclick="toggleStatus(1779198063161.9775)">Новая</button>
+          <button onclick="deleteOrder(1779198063161.9775)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
+        </div>
+      </div>
+      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779198063161.9775,this.value)"></div>
+    </div>
+    <div class="card">
+      <div class="ctop">
+        <div class="route">Лопатино <span>→</span> Ростов</div>
+        <div class="badges">
+          
+          <span class="badge bgr">Горох</span>
+          <span id="mapstatus_1779198063154.945" title="Найдено на карте" style="font-size: 13px; font-weight: 700; color: var(--green); padding: 2px 5px; border-radius: 4px; background: transparent;">✓</span>
+        </div>
+      </div>
+      <div class="card-fields">
+        <div class="cf-row"><span class="cf-label">Культура:</span><span class="cf-val">Горох</span></div>
+        <div class="cf-row"><span class="cf-label">Объём:</span><span class="cf-val">1400 тонн</span></div>
+        <div class="cf-row"><span class="cf-label">Место погрузки:</span><span class="cf-val">Лопатино, Вадский р-н, Нижнегородская обл.</span></div>
+        <div class="cf-row"><span class="cf-label">Место выгрузки:</span><span class="cf-val">Ростов</span></div>
+        <div class="cf-row"><span class="cf-label">Расстояние:</span><span class="cf-val">1200 км</span></div>
+        <div class="cf-row"><span class="cf-label">Ставка:</span><span class="cf-val hl">3&nbsp;600₽/т без НДС</span></div>
+        
+        
+        
+        
+      </div>
+      <div class="cfoot">
+        <span class="csrc">Telegram AI Агент</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="sbtn sn" onclick="toggleStatus(1779198063154.945)">Новая</button>
+          <button onclick="deleteOrder(1779198063154.945)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
+        </div>
+      </div>
+      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779198063154.945,this.value)"></div>
+    </div>
     <div class="card">
       <div class="ctop">
         <div class="route">хутор Носовский <span>→</span> Ростов на Дону</div>
         <div class="badges">
           
           <span class="badge bgr">Чечевица</span>
-          <span id="mapstatus_1779190888402.7405" title="Найдено на карте" style="font-size: 13px; font-weight: 700; color: var(--green); padding: 2px 5px; border-radius: 4px; background: transparent;">✓</span>
+          <span id="mapstatus_1779197397457.9421" title="Найдено на карте" style="font-size:13px;font-weight:700;color:var(--green);padding:2px 5px;border-radius:4px;background:rgba(61,186,122,0.12)">✓</span>
         </div>
       </div>
       <div class="card-fields">
@@ -220,43 +460,13 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
       <div class="cfoot">
         <span class="csrc">Telegram AI Агент</span>
         <div style="display:flex;gap:6px;align-items:center">
-          <button class="sbtn sn" onclick="toggleStatus(1779190888402.7405)">Новая</button>
-          <button onclick="deleteOrder(1779190888402.7405)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
+          <button class="sbtn sn" onclick="toggleStatus(1779197397457.9421)">Новая</button>
+          <button onclick="deleteOrder(1779197397457.9421)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
         </div>
       </div>
-      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779190888402.7405,this.value)"></div>
-    </div>
-    <div class="card">
-      <div class="ctop">
-        <div class="route">Лопатино <span>→</span> Ростов</div>
-        <div class="badges">
-          
-          <span class="badge bgr">Горох</span>
-          <span id="mapstatus_1779185538614.1907" title="Найдено на карте" style="font-size:13px;font-weight:700;color:var(--green);padding:2px 5px;border-radius:4px;background:rgba(61,186,122,0.12)">✓</span>
-        </div>
-      </div>
-      <div class="card-fields">
-        <div class="cf-row"><span class="cf-label">Культура:</span><span class="cf-val">Горох</span></div>
-        <div class="cf-row"><span class="cf-label">Объём:</span><span class="cf-val">1400 тонн</span></div>
-        <div class="cf-row"><span class="cf-label">Место погрузки:</span><span class="cf-val">Лопатино, Вадский р-н, Нижнегородская обл.</span></div>
-        <div class="cf-row"><span class="cf-label">Место выгрузки:</span><span class="cf-val">Ростов</span></div>
-        <div class="cf-row"><span class="cf-label">Расстояние:</span><span class="cf-val">1200 км</span></div>
-        <div class="cf-row"><span class="cf-label">Ставка:</span><span class="cf-val hl">3&nbsp;600₽/т без НДС</span></div>
-        
-        
-        
-        
-      </div>
-      <div class="cfoot">
-        <span class="csrc">Telegram (ID:-1001542166589)</span>
-        <div style="display:flex;gap:6px;align-items:center">
-          <button class="sbtn sn" onclick="toggleStatus(1779185538614.1907)">Новая</button>
-          <button onclick="deleteOrder(1779185538614.1907)" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
-        </div>
-      </div>
-      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779185538614.1907,this.value)"></div>
+      <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="" onchange="saveNote(1779197397457.9421,this.value)"></div>
     </div></div>
-    <div id="map-view" style="display: block;">
+    <div id="map-view" style="display: none;">
       <div class="map-searchbar">
         <input type="text" id="map-search" placeholder="слобода Дячкино, Тарасовский район..." onkeydown="if(event.key===&#39;Enter&#39;)geocodeSearch()">
         <button onclick="geocodeSearch()">Найти</button>
@@ -265,7 +475,7 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
         <div class="spin-sm"></div>
         <span>Определяю координаты...</span>
       </div>
-      <div id="map"></div>
+      <div id="map" class="leaflet-container leaflet-touch leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom" tabindex="0" style="position: relative; outline-style: none;"><div class="leaflet-pane leaflet-map-pane" style="transform: translate3d(-518px, 568px, 0px);"><div class="leaflet-pane leaflet-tile-pane"><div class="leaflet-layer " style="z-index: 1; opacity: 1;"><div class="leaflet-tile-container leaflet-zoom-animated" style="z-index: 19; transform: translate3d(632px, 16px, 0px) scale(1);"><img alt="" src="./ГрузПоток_files/21.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(468px, -205px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/21(1).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(724px, -205px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/20.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(468px, -461px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/20(1).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(724px, -461px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/22.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(468px, 51px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/22(1).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(724px, 51px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/21(2).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(212px, -205px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/21(3).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(980px, -205px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/20(2).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(212px, -461px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/20(3).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(980px, -461px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/22(2).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(212px, 51px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/22(3).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(980px, 51px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/21(4).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-44px, -205px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/21(5).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1236px, -205px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/20(4).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-44px, -461px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/20(5).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1236px, -461px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/22(4).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-44px, 51px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/22(5).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1236px, 51px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/21(6).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-300px, -205px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/21(7).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1492px, -205px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/20(6).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-300px, -461px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/20(7).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1492px, -461px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/22(6).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-300px, 51px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/22(7).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1492px, 51px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/19.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(724px, -717px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/19(1).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(468px, -717px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/19(2).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(980px, -717px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/19(3).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(212px, -717px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/19(4).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1236px, -717px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/19(5).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-44px, -717px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/19(6).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1492px, -717px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/20(8).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1748px, -461px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/19(7).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-300px, -717px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/19(8).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1748px, -717px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/21(8).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1748px, -205px, 0px); opacity: 1;"><img alt="" src="./ГрузПоток_files/22(8).png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(1748px, 51px, 0px); opacity: 1;"></div><div class="leaflet-tile-container leaflet-zoom-animated" style="z-index: 18; transform: translate3d(-36px, -89px, 0px) scale(2);"></div></div></div><div class="leaflet-pane leaflet-overlay-pane"></div><div class="leaflet-pane leaflet-shadow-pane"></div><div class="leaflet-pane leaflet-marker-pane"><div class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" tabindex="0" role="button" style="margin-left: -7px; margin-top: -7px; width: 14px; height: 14px; transform: translate3d(1041px, 250px, 0px); z-index: 250;"><div style="width:14px;height:14px;border-radius:50%;background:#f0a500;border:2px solid #fff;box-shadow:0 0 8px #f0a50088;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff"></div></div><div class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" tabindex="0" role="button" style="margin-left: -7px; margin-top: -7px; width: 14px; height: 14px; transform: translate3d(1174px, 174px, 0px); z-index: 174;"><div style="width:14px;height:14px;border-radius:50%;background:#f0a500;border:2px solid #fff;box-shadow:0 0 8px #f0a50088;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff"></div></div><div class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" tabindex="0" role="button" style="margin-left: -7px; margin-top: -7px; width: 14px; height: 14px; transform: translate3d(1163px, 230px, 0px); z-index: 230;"><div style="width:14px;height:14px;border-radius:50%;background:#f0a500;border:2px solid #fff;box-shadow:0 0 8px #f0a50088;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff"></div></div><div class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" tabindex="0" role="button" style="margin-left: -7px; margin-top: -7px; width: 14px; height: 14px; transform: translate3d(1581px, -424px, 0px); z-index: -424;"><div style="width:14px;height:14px;border-radius:50%;background:#f0a500;border:2px solid #fff;box-shadow:0 0 8px #f0a50088;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff"></div></div><div class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" tabindex="0" role="button" style="margin-left: -7px; margin-top: -7px; width: 14px; height: 14px; transform: translate3d(1548px, -62px, 0px); z-index: -62;"><div style="width:14px;height:14px;border-radius:50%;background:#f0a500;border:2px solid #fff;box-shadow:0 0 8px #f0a50088;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff"></div></div></div><div class="leaflet-pane leaflet-tooltip-pane"></div><div class="leaflet-pane leaflet-popup-pane"></div><div class="leaflet-proxy leaflet-zoom-animated" style="transform: translate3d(10106px, 5329px, 0px) scale(32);"></div></div><div class="leaflet-control-container"><div class="leaflet-top leaflet-left"><div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="https://normalive228-max.github.io/GruzpotokAPP/#" title="Zoom in" role="button" aria-label="Zoom in" aria-disabled="false"><span aria-hidden="true">+</span></a><a class="leaflet-control-zoom-out" href="https://normalive228-max.github.io/GruzpotokAPP/#" title="Zoom out" role="button" aria-label="Zoom out" aria-disabled="false"><span aria-hidden="true">−</span></a></div></div><div class="leaflet-top leaflet-right"></div><div class="leaflet-bottom leaflet-left"></div><div class="leaflet-bottom leaflet-right"><div class="leaflet-control-attribution leaflet-control"><a href="https://leafletjs.com/" title="A JavaScript library for interactive maps"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8" class="leaflet-attribution-flag"><path fill="#4C7BE1" d="M0 0h12v4H0z"></path><path fill="#FFD500" d="M0 4h12v3H0z"></path><path fill="#E0BC00" d="M0 7h12v1H0z"></path></svg> Leaflet</a> <span aria-hidden="true">|</span> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a></div></div></div></div>
       <div class="map-legend">
         <div><div class="dot" style="background:#f0a500"></div> Обычная заявка</div>
         <div><div class="dot" style="background:#e05050"></div> Срочная заявка</div>
@@ -274,13 +484,13 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
     </div>
   </div>
   <div class="bnav">
-    <div class="ni2" id="nav-list" onclick="switchTab(&#39;list&#39;)">
+    <div class="ni2 active" id="nav-list" onclick="switchTab(&#39;list&#39;)">
       <div class="nico">📋</div><div class="nlbl">Заявки</div>
     </div>
     <div class="ni2 nadd" onclick="openModal()">
       <div class="nico">＋</div><div class="nlbl">Добавить</div>
     </div>
-    <div class="ni2 active" id="nav-map" onclick="switchTab(&#39;map&#39;)">
+    <div class="ni2" id="nav-map" onclick="switchTab(&#39;map&#39;)">
       <div class="nico">🗺</div><div class="nlbl">Карта</div>
     </div>
   </div>
@@ -380,7 +590,7 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
     </div>
   </div>
 </div>
-<div class="toast" id="toast">✅ Добавлено 1 новых заявок</div>
+<div class="toast" id="toast">✅ Добавлено 8 новых заявок</div>
 
 <script>
 // ===================== КОНФИГ =====================
@@ -447,6 +657,25 @@ async function photonSearch(query) {
   return null;
 }
 
+// Раскрываем сокращения в адресе для лучшего геокодирования
+function expandAddress(address) {
+  return address
+    .replace(/р-н/gi, 'район')
+    .replace(/обл\./gi, 'область')
+    .replace(/обл/gi, 'область')
+    .replace(/м\.о\./gi, 'муниципальный округ')
+    .replace(/м\.о/gi, 'муниципальный округ')
+    .replace(/пос\./gi, 'посёлок')
+    .replace(/п\./gi, 'посёлок')
+    .replace(/с\./gi, 'село')
+    .replace(/х\./gi, 'хутор')
+    .replace(/ст\./gi, 'станица')
+    .replace(/г\./gi, 'город')
+    .replace(/ул\./gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function geocodeAddress(address) {
   if (!address) return null;
   const key = address.trim().toLowerCase();
@@ -474,18 +703,24 @@ async function geocodeAddress(address) {
   const ukVariants = ruToUkVariants(firstName);
   const region = parts.slice(1).join(', ');
 
+  // Раскрываем сокращения
+  const expandedAddress = expandAddress(address);
+  const expandedParts = expandedAddress.split(',').map(s => s.trim()).filter(Boolean);
+
   const queries = [
-    // Русские варианты
+    expandedAddress,
     address,
+    expandedParts.slice(0, 3).join(', '),
     parts.slice(0, 3).join(', '),
+    expandedParts.slice(0, 2).join(', '),
     parts.slice(0, 2).join(', '),
+    firstName + (region ? ', ' + expandAddress(region) : ''),
     firstName + (region ? ', ' + region : ''),
-    // Украинские варианты с регионом
+    ...ukVariants.map(v => region ? v + ', ' + expandAddress(region) : v),
     ...ukVariants.map(v => region ? v + ', ' + region : v),
-    // Только название без региона
     firstName,
     ...ukVariants,
-  ].filter((v, i, a) => v && a.indexOf(v) === i); // убираем дубли
+  ].filter((v, i, a) => v && a.indexOf(v) === i);
 
   // 3. Пробуем Nominatim для каждого запроса
   for (const q of queries.slice(0, 6)) {

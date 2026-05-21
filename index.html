@@ -588,6 +588,8 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
       <button class="bsec" style="background:rgba(224,80,80,0.15);color:var(--red);border-color:rgba(224,80,80,0.3)" onclick="deleteAllOrders();closeSettings()">🗑 Удалить все заявки</button>
       <button class="bp" onclick="saveSettings()">Сохранить</button>
     </div>
+    <button class="bsec" style="width:100%;margin-top:8px;font-size:12px;padding:8px" onclick="clearGeocodeCache()">🗺 Сбросить кеш геокодирования</button>
+    <div class="set-hint">Нажми если добавил Яндекс ключ, а адреса остались ненайденными — заставит попробовать снова.</div>
   </div>
 </div>
 <div class="toast" id="toast">✅ Добавлено 8 новых заявок</div>
@@ -679,10 +681,15 @@ function expandAddress(address) {
 async function geocodeAddress(address) {
   if (!address) return null;
   const key = address.trim().toLowerCase();
-  if (geocodeCache[key]) return geocodeCache[key];
+
+  // Проверяем кеш (включая закешированные неудачи — null)
+  if (geocodeCache.hasOwnProperty(key)) return geocodeCache[key];
   try {
     const stored = localStorage.getItem('gc_' + key);
-    if (stored) { geocodeCache[key] = JSON.parse(stored); return geocodeCache[key]; }
+    if (stored !== null) {
+      const val = stored === 'null' ? null : JSON.parse(stored);
+      geocodeCache[key] = val; return val;
+    }
   } catch(e) {}
 
   const parts = address.split(',').map(s => s.trim()).filter(Boolean);
@@ -693,80 +700,69 @@ async function geocodeAddress(address) {
   const allKnown = { ...KNOWN_COORDS, ...manualSaved };
   for (const k of Object.keys(allKnown)) {
     if (firstName.includes(k) || k.includes(firstName)) {
-      const r = allKnown[k];
-      geocodeCache[key] = r;
-      return r;
+      const r = allKnown[k]; geocodeCache[key] = r; return r;
     }
   }
 
-  // 2. Строим список запросов — полные и упрощённые варианты на русском и украинском
   const ukVariants = ruToUkVariants(firstName);
   const region = parts.slice(1).join(', ');
-
-  // Раскрываем сокращения
   const expandedAddress = expandAddress(address);
   const expandedParts = expandedAddress.split(',').map(s => s.trim()).filter(Boolean);
 
   const queries = [
-    expandedAddress,
-    address,
-    expandedParts.slice(0, 3).join(', '),
-    parts.slice(0, 3).join(', '),
-    expandedParts.slice(0, 2).join(', '),
-    parts.slice(0, 2).join(', '),
+    expandedAddress, address,
+    expandedParts.slice(0, 3).join(', '), parts.slice(0, 3).join(', '),
+    expandedParts.slice(0, 2).join(', '), parts.slice(0, 2).join(', '),
     firstName + (region ? ', ' + expandAddress(region) : ''),
     firstName + (region ? ', ' + region : ''),
     ...ukVariants.map(v => region ? v + ', ' + expandAddress(region) : v),
     ...ukVariants.map(v => region ? v + ', ' + region : v),
-    firstName,
-    ...ukVariants,
+    firstName, ...ukVariants,
   ].filter((v, i, a) => v && a.indexOf(v) === i);
 
-  // 3. Пробуем Nominatim для каждого запроса
-  for (const q of queries.slice(0, 6)) {
+  // Сохраняем результат (включая неудачу) в кеш
+  const done = (r) => {
+    geocodeCache[key] = r;
+    try { localStorage.setItem('gc_' + key, r ? JSON.stringify(r) : 'null'); } catch(e) {}
+    return r;
+  };
+
+  // 2. Яндекс первым — лучше всего для российских и украинских сёл
+  for (const q of [address, firstName + (region ? ', ' + region : ''), ...ukVariants.slice(0,1).map(v => v + (region ? ', ' + region : ''))]) {
+    const result = await yandexSearch(q);
+    if (result) return done(result);
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  // 3. Nominatim — первые 3 варианта
+  for (const q of queries.slice(0, 3)) {
     const result = await nominatimSearch(q);
-    if (result) {
-      geocodeCache[key] = result;
-      try { localStorage.setItem('gc_' + key, JSON.stringify(result)); } catch(e) {}
-      return result;
-    }
+    if (result) return done(result);
     await new Promise(r => setTimeout(r, 100));
   }
 
   // 4. Photon
   for (const q of [address, firstName + (region ? ' ' + region : ''), ...ukVariants.slice(0,2)]) {
     const result = await photonSearch(q);
-    if (result) {
-      geocodeCache[key] = result;
-      try { localStorage.setItem('gc_' + key, JSON.stringify(result)); } catch(e) {}
-      return result;
-    }
+    if (result) return done(result);
     await new Promise(r => setTimeout(r, 100));
   }
 
-  // 5. Яндекс Геокодер — лучше всего знает российские и постсоветские сёла
-  for (const q of [address, firstName + (region ? ', ' + region : ''), ...ukVariants.slice(0,1).map(v => v + (region ? ', ' + region : ''))]) {
-    const result = await yandexSearch(q);
-    if (result) {
-      geocodeCache[key] = result;
-      try { localStorage.setItem('gc_' + key, JSON.stringify(result)); } catch(e) {}
-      return result;
-    }
+  // 5. Nominatim — ещё варианты
+  for (const q of queries.slice(3, 6)) {
+    const result = await nominatimSearch(q);
+    if (result) return done(result);
     await new Promise(r => setTimeout(r, 100));
   }
 
-  // 6. Последний шанс — Nominatim без ограничения по стране
+  // 6. Nominatim без ограничения по стране
   for (const q of [address, firstName + (region ? ', ' + region : ''), ...ukVariants.slice(0,2)]) {
     const result = await nominatimSearch(q, '');
-    if (result) {
-      geocodeCache[key] = result;
-      try { localStorage.setItem('gc_' + key, JSON.stringify(result)); } catch(e) {}
-      return result;
-    }
+    if (result) return done(result);
     await new Promise(r => setTimeout(r, 100));
   }
 
-  return null;
+  return done(null); // Кешируем неудачу чтобы не пробовать снова
 }
 
 // ===================== AI ПАРСЕР =====================
@@ -1258,6 +1254,14 @@ function loadManualCoords() {
   Object.assign(KNOWN_COORDS, saved);
 }
 
+function clearGeocodeCache() {
+  const keys = Object.keys(localStorage).filter(k => k.startsWith('gc_'));
+  keys.forEach(k => localStorage.removeItem(k));
+  Object.keys(geocodeCache).forEach(k => delete geocodeCache[k]);
+  Object.keys(mapStatusCache).forEach(k => delete mapStatusCache[k]);
+  toast('🗺 Кеш геокодирования сброшен — перейди на карту для повторного поиска');
+}
+
 function openSettings() {
   document.getElementById('cfg-token').value = CFG.tgToken || '';
   document.getElementById('cfg-chatid').value = CFG.tgChatId || '';
@@ -1548,12 +1552,7 @@ function switchTab(tab){
   });
   document.getElementById('list-view').style.display = tab==='list'?'flex':'none';
   document.getElementById('map-view').style.display = tab==='map'?'block':'none';
-    if(tab==='map'){
-    setTimeout(()=>{
-      if(!mapOk) initMap();
-      else { map.invalidateSize(); renderMap(); }
-    }, 50);
-  }
+  if(tab==='map'){ if(!mapOk)initMap(); else renderMap(); }
 }
 
 function initMap(){
@@ -1577,10 +1576,16 @@ async function _renderMapAsync(){
   const ind = document.getElementById('geocoding-indicator');
   ind.classList.add('show');
 
-  // Геокодируем все адреса
-  const geocoded = await Promise.all(data.map(async o=>({
-    o, fg: await geocodeAddress(o.from)
-  })));
+  // Геокодируем пакетами по 6 чтобы не перегружать Nominatim
+  const BATCH = 6;
+  const geocoded = [];
+  for (let i = 0; i < data.length; i += BATCH) {
+    const batch = data.slice(i, i + BATCH);
+    const results = await Promise.all(batch.map(async o => ({
+      o, fg: await geocodeAddress(o.from)
+    })));
+    geocoded.push(...results);
+  }
   ind.classList.remove('show');
 
   // Группируем заявки по координатам погрузки (округляем до 4 знаков = ~11м)

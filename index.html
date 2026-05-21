@@ -1548,7 +1548,12 @@ function switchTab(tab){
   });
   document.getElementById('list-view').style.display = tab==='list'?'flex':'none';
   document.getElementById('map-view').style.display = tab==='map'?'block':'none';
-  if(tab==='map'){ if(!mapOk)initMap(); else renderMap(); }
+    if(tab==='map'){
+    setTimeout(()=>{
+      if(!mapOk) initMap();
+      else { map.invalidateSize(); renderMap(); }
+    }, 50);
+  }
 }
 
 function initMap(){

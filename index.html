@@ -729,7 +729,7 @@ async function geocodeAddress(address) {
   };
 
   // 2. Яндекс первым — лучше всего для российских и украинских сёл
-  for (const q of [address, firstName + (region ? ', ' + region : ''), ...ukVariants.slice(0,1).map(v => v + (region ? ', ' + region : ''))]) {
+  for (const q of [expandedAddress, address, firstName + (region ? ', ' + region : ''), ...ukVariants.slice(0,1).map(v => v + (region ? ', ' + region : ''))]) {
     const result = await yandexSearch(q);
     if (result) return done(result);
     await new Promise(r => setTimeout(r, 100));

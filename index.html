@@ -1678,7 +1678,7 @@ function switchTab(tab){
 
 function initMap(){
   mapOk = true;
-  map = L.map('map',{zoomControl:true,attributionControl:true}).setView([52,45],5);
+  map = L.map('map',{zoomControl:true,attributionControl:false}).setView([52,45],5);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     maxZoom:19,
     attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

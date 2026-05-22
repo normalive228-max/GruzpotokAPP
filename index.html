@@ -152,6 +152,12 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
 .parse-preview{background:var(--bg3);border-radius:var(--rs);padding:12px;margin-top:10px;font-size:12px;display:none}
 .parse-preview.show{display:block}
 .parse-preview .pf{margin-bottom:4px;color:var(--text2)}.parse-preview .pf strong{color:var(--text)}
+/* Корзина и избранное */
+#trash-view{height:100%;overflow-y:auto;padding:10px;flex-direction:column;gap:8px;display:none}
+#trash-view::-webkit-scrollbar{width:3px}
+#trash-view::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.fav-btn{background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;line-height:1;transition:transform .15s}
+.fav-btn:active{transform:scale(1.3)}
 </style>
 </head>
 <body class="">
@@ -172,6 +178,7 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
   <div class="tabs">
     <div class="tab active" id="tab-list" onclick="switchTab(&#39;list&#39;)">📋 Заявки</div>
     <div class="tab" id="tab-map" onclick="switchTab(&#39;map&#39;)">🗺 Карта</div>
+    <div class="tab" id="tab-trash" onclick="switchTab(&#39;trash&#39;)">🗑 Корзина<span id="trash-count" style="display:none;margin-left:4px;background:var(--red);color:#fff;font-size:10px;padding:1px 5px;border-radius:10px;vertical-align:middle"></span></div>
   </div>
   <div class="filters">
     <div class="sw"><span class="si">🔍</span><input type="text" id="fsearch" placeholder="Маршрут, город..." oninput="renderOrders()"></div>
@@ -193,6 +200,9 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
     <div class="si2"><div class="sv" id="stons">5670 т</div><div class="sl">тоннаж</div></div>
     <div class="si2"><div class="sv" id="sprice">1&nbsp;983₽</div><div class="sl">ср. цена/т</div></div>
     <div class="si2"><div class="sv" id="surg">0</div><div class="sl">срочных</div></div>
+  </div>
+  <div id="bulk-bar" style="background:var(--bg3);padding:6px 12px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end">
+    <button onclick="deleteAllExceptFavorites()" style="background:rgba(224,80,80,0.12);color:var(--red);border:1px solid rgba(224,80,80,0.25);font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--rs);cursor:pointer;font-family:'Golos Text',sans-serif">🗑 Удалить все кроме ⭐</button>
   </div>
   <div id="content">
     <div id="list-view" style="display: flex;">
@@ -482,6 +492,7 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
         <div><div class="dot" style="background:#3dba7a"></div> Взята / выполнена</div>
       </div>
     </div>
+    <div id="trash-view"></div>
   </div>
   <div class="bnav">
     <div class="ni2 active" id="nav-list" onclick="switchTab(&#39;list&#39;)">
@@ -492,6 +503,9 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
     </div>
     <div class="ni2" id="nav-map" onclick="switchTab(&#39;map&#39;)">
       <div class="nico">🗺</div><div class="nlbl">Карта</div>
+    </div>
+    <div class="ni2" id="nav-trash" onclick="switchTab(&#39;trash&#39;)">
+      <div class="nico">🗑</div><div class="nlbl">Корзина</div>
     </div>
   </div>
 </div>
@@ -1417,7 +1431,7 @@ function save(){ localStorage.setItem('gp_orders', JSON.stringify(orders)); }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800); }
 
 function updRegion(){
-  const cities = new Set(orders.map(o=>o.fromShort||o.from).filter(Boolean));
+  const cities = new Set(orders.filter(o=>!o.trashed).map(o=>o.fromShort||o.from).filter(Boolean));
   const sel = document.getElementById('fregion'); const cur = sel.value;
   sel.innerHTML = '<option value="">Все регионы</option>';
   [...cities].sort().forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; if(c===cur)o.selected=true; sel.appendChild(o); });
@@ -1430,6 +1444,7 @@ function getFiltered(){
   const status = document.getElementById('fstatus').value;
   const sort = document.getElementById('fsort').value;
   let res = orders.filter(o=>{
+    if(o.trashed) return false;
     const mq = !q || (o.from+o.to+o.cargo+(o.source||'')).toLowerCase().includes(q);
     const mc = !cargo || (o.cargo&&o.cargo.toLowerCase().includes(cargo.toLowerCase()));
     const mr = !region || (o.fromShort||o.from) === region;
@@ -1442,11 +1457,12 @@ function getFiltered(){
 }
 
 function deleteOrder(id){
-  if(!confirm('Удалить эту заявку?')) return;
-  orders = orders.filter(o => o.id !== id);
-  save(); updRegion(); renderOrders();
+  const o = orders.find(x=>x.id===id); if(!o) return;
+  o.trashed = true;
+  o.trashedAt = new Date().toLocaleDateString('ru',{day:'2-digit',month:'2-digit',year:'2-digit'});
+  save(); updRegion(); renderOrders(); updateTrashBadge();
   if(curTab==='map') renderMap();
-  toast('Заявка удалена');
+  toast('Заявка перемещена в корзину');
 }
 
 function deleteAllOrders(){
@@ -1464,6 +1480,97 @@ function toggleStatus(id){
 }
 function saveNote(id,v){ const o=orders.find(x=>x.id===id); if(o){o.note=v;save();} }
 function slabel(s){ return {new:'Новая',taken:'Взята',done:'Выполнена'}[s]||'Новая'; }
+
+function updateTrashBadge(){
+  const count = orders.filter(o=>o.trashed).length;
+  const badge = document.getElementById('trash-count');
+  if(!badge) return;
+  badge.textContent = count||'';
+  badge.style.display = count?'inline':'none';
+}
+
+function toggleFavorite(id){
+  const o = orders.find(x=>x.id===id); if(!o) return;
+  o.favorite = !o.favorite;
+  save(); renderOrders();
+}
+
+function toggleFavoriteFromMap(id){
+  const o = orders.find(x=>x.id===id); if(!o) return;
+  o.favorite = !o.favorite;
+  save();
+  const btn = document.getElementById('fav-btn-'+id);
+  if(btn){
+    btn.textContent = o.favorite?'⭐ В избранном':'☆ В избранное';
+    btn.style.background = o.favorite?'rgba(240,165,0,0.15)':'var(--bg3)';
+    btn.style.color = o.favorite?'var(--accent)':'var(--text2)';
+    btn.style.borderColor = o.favorite?'var(--border2)':'var(--border)';
+  }
+  renderOrders();
+}
+
+function restoreFromTrash(id){
+  const o = orders.find(x=>x.id===id); if(!o) return;
+  o.trashed = false; delete o.trashedAt;
+  save(); updRegion(); renderTrash(); updateTrashBadge();
+  if(curTab==='map') renderMap();
+  toast('↩ Заявка восстановлена');
+}
+
+function permanentDelete(id){
+  if(!confirm('Удалить заявку безвозвратно? Это действие нельзя отменить.')) return;
+  orders = orders.filter(o=>o.id!==id);
+  save(); renderTrash(); updateTrashBadge();
+  toast('Заявка удалена навсегда');
+}
+
+function deleteAllExceptFavorites(){
+  const toTrash = orders.filter(o=>!o.favorite&&!o.trashed);
+  if(!toTrash.length){ toast('Нет заявок для удаления'); return; }
+  if(!confirm(`Переместить ${toTrash.length} заявок в корзину?\nЗаявки со ⭐ останутся.`)) return;
+  const now = new Date().toLocaleDateString('ru',{day:'2-digit',month:'2-digit',year:'2-digit'});
+  toTrash.forEach(o=>{ o.trashed=true; o.trashedAt=now; });
+  save(); updRegion(); renderOrders(); updateTrashBadge();
+  if(curTab==='map') renderMap();
+  toast(`🗑 ${toTrash.length} заявок перемещено в корзину`);
+}
+
+function renderTrash(){
+  const el = document.getElementById('trash-view');
+  const trashed = orders.filter(o=>o.trashed);
+  if(!trashed.length){
+    el.innerHTML = '<div class="empty"><div class="ei">🗑</div><p>Корзина пуста.<br>Восстановленные заявки<br>вернутся в раздел «Заявки».</p></div>';
+    return;
+  }
+  el.innerHTML = trashed.map(o=>{
+    const pNoVat = o.priceNoVat||o.price;
+    const priceStr = pNoVat?`${pNoVat.toLocaleString('ru')}₽/т без НДС`:'—';
+    return `
+    <div class="card">
+      <div class="ctop">
+        <div class="route">${o.fromShort||o.from||'?'} <span>→</span> ${o.toShort||o.to||'?'}</div>
+        <div class="badges">
+          ${o.favorite?'<span style="font-size:14px;line-height:1">⭐</span>':''}
+          <span class="badge ${getBadge(o.cargo)}">${o.cargo||'—'}</span>
+        </div>
+      </div>
+      <div class="card-fields">
+        ${o.from?`<div class="cf-row"><span class="cf-label">Место погрузки:</span><span class="cf-val">${o.from}</span></div>`:''}
+        ${o.to?`<div class="cf-row"><span class="cf-label">Место выгрузки:</span><span class="cf-val">${o.to}</span></div>`:''}
+        ${o.weight?`<div class="cf-row"><span class="cf-label">Объём:</span><span class="cf-val">${o.weight} тонн</span></div>`:''}
+        <div class="cf-row"><span class="cf-label">Ставка:</span><span class="cf-val hl">${priceStr}</span></div>
+        ${o.trashedAt?`<div class="cf-row"><span class="cf-label">В корзине с:</span><span class="cf-val">${o.trashedAt}</span></div>`:''}
+      </div>
+      <div class="cfoot">
+        <span class="csrc">${o.source||'—'}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="sbtn sn" onclick="restoreFromTrash(${o.id})">↩ Восстановить</button>
+          <button onclick="permanentDelete(${o.id})" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer" title="Удалить навсегда">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
 
 // Кеш статуса геокодирования для карточек (заполняется асинхронно)
 const mapStatusCache = {};
@@ -1519,6 +1626,7 @@ function renderOrders(){
         <div class="route">${o.fromShort||o.from||'?'} <span>→</span> ${o.toShort||o.to||'?'}</div>
         <div class="badges">
           ${o.urgent?'<span class="badge bu">СРОЧНО</span>':''}
+          ${o.favorite?'<span style="font-size:14px;line-height:1">⭐</span>':''}
           <span class="badge ${getBadge(o.cargo)}">${o.cargo||'—'}</span>
           <span id="mapstatus_${o.id}" title="${mapTitle}" style="font-size:13px;font-weight:700;color:${mapColor};padding:2px 5px;border-radius:4px;background:${mapBg}">${mapIcon}</span>
         </div>
@@ -1539,12 +1647,14 @@ function renderOrders(){
         <span class="csrc">${o.source||'—'}</span>
         <div style="display:flex;gap:6px;align-items:center">
           <button class="sbtn s${(o.status||'n').charAt(0)}" onclick="toggleStatus(${o.id})">${slabel(o.status)}</button>
+          <button class="fav-btn" onclick="toggleFavorite(${o.id})" title="${o.favorite?'Убрать из избранного':'В избранное'}">${o.favorite?'⭐':'☆'}</button>
           <button onclick="deleteOrder(${o.id})" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:5px 8px;border-radius:var(--rs);cursor:pointer">✕</button>
         </div>
       </div>
       <div class="nrow"><input class="ni" type="text" placeholder="Заметка..." value="${(o.note||'').replace(/"/g,'&quot;')}" onchange="saveNote(${o.id},this.value)"></div>
     </div>`;
   }).join('');
+  updateTrashBadge();
   // Асинхронно проверяем статус геокодирования
   updateMapStatuses(data);
 }
@@ -1552,13 +1662,18 @@ function renderOrders(){
 // ===================== КАРТА =====================
 function switchTab(tab){
   curTab = tab;
-  ['list','map'].forEach(t=>{
+  ['list','map','trash'].forEach(t=>{
     document.getElementById('tab-'+t).classList.toggle('active',tab===t);
     document.getElementById('nav-'+t).classList.toggle('active',tab===t);
   });
   document.getElementById('list-view').style.display = tab==='list'?'flex':'none';
   document.getElementById('map-view').style.display = tab==='map'?'block':'none';
+  document.getElementById('trash-view').style.display = tab==='trash'?'flex':'none';
+  document.querySelector('.filters').style.display = tab==='trash'?'none':'flex';
+  document.querySelector('.sbar').style.display = tab==='trash'?'none':'flex';
+  document.getElementById('bulk-bar').style.display = tab==='list'?'flex':'none';
   if(tab==='map'){ if(!mapOk)initMap(); else renderMap(); }
+  if(tab==='trash'){ renderTrash(); }
 }
 
 function initMap(){
@@ -1632,6 +1747,7 @@ async function _renderMapAsync(){
           ${o.loadDate?`<div class="prow">Дата: <strong>${o.loadDate}</strong></div>`:''}
           ${o.contact?`<div class="prow">📞 <strong>${o.contact}</strong></div>`:''}
           <div class="pp">${pNoVat?pNoVat.toLocaleString('ru')+'₽/т без НДС':'—'}${pVat?' / '+pVat.toLocaleString('ru')+'₽ с НДС':''}</div>
+          <button id="fav-btn-${o.id}" onclick="toggleFavoriteFromMap(${o.id})" style="margin-top:6px;background:${o.favorite?'rgba(240,165,0,0.15)':'var(--bg3)'};color:${o.favorite?'var(--accent)':'var(--text2)'};border:1px solid ${o.favorite?'var(--border2)':'var(--border)'};font-size:11px;font-weight:600;padding:5px 10px;border-radius:var(--rs);cursor:pointer;width:100%;font-family:'Golos Text',sans-serif">${o.favorite?'⭐ В избранном':'☆ В избранное'}</button>
           ${orders.length>1?`</div>`:``}
         `;
       }).join('')}
@@ -1697,7 +1813,7 @@ setTimeout(()=>{
   s.style.opacity = '0';
   setTimeout(()=>s.style.display='none',400);
   loadManualCoords();
-  updRegion(); renderOrders();
+  updRegion(); renderOrders(); updateTrashBadge();
   if(!CFG.tgToken) setTimeout(()=>toast('⚙️ Зайди в настройки и подключи Telegram бота'),1800);
 },1200);
 

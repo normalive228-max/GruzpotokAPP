@@ -971,15 +971,20 @@ function parseBasic(text) {
   return result;
 }
 
+function normalizeAddr(s) {
+  if (!s) return s;
+  return s.replace(/([\u0400-\u04FF\w]+)\(([^)]+)\)/g, '$1, $2').replace(/\s+/g,' ').trim();
+}
+
 function parsedToOrder(parsed, source) {
   return {
     id: Date.now() + Math.random(),
     cargo: [parsed.cargo, parsed.cargoType].filter(Boolean).join(' '),
     weight: parsed.weight,
-    from: parsed.from || parsed.fromShort,
-    fromShort: parsed.fromShort,
-    to: parsed.to || parsed.toShort,
-    toShort: parsed.toShort,
+    from: normalizeAddr(parsed.from || parsed.fromShort),
+    fromShort: normalizeAddr(parsed.fromShort),
+    to: normalizeAddr(parsed.to || parsed.toShort),
+    toShort: normalizeAddr(parsed.toShort),
     distance: parsed.distance,
     priceNoVat: parsed.priceNoVat,
     priceVat: parsed.priceVat,

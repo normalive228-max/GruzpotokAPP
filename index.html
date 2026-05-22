@@ -662,6 +662,7 @@ async function photonSearch(query) {
 // Раскрываем сокращения в адресе для лучшего геокодирования
 function expandAddress(address) {
   return address
+    .replace(/([\u0400-\u04FF\w]+)\(([^)]+)\)/g, '$1, $2')
     .replace(/р-н/gi, 'район')
     .replace(/обл\./gi, 'область')
     .replace(/обл/gi, 'область')
@@ -1629,6 +1630,7 @@ async function _renderMapAsync(){
           ${orders.length>1?`</div>`:``}
         `;
       }).join('')}
+      <a href="https://yandex.ru/maps/?pt=${fc[1]},${fc[0]}&z=14" target="_blank" style="display:block;margin-top:10px;text-align:center;color:var(--accent);font-size:12px;font-weight:600;text-decoration:none;border-top:1px solid rgba(255,255,255,0.1);padding-top:8px">🗺 Открыть в Яндекс Картах</a>
     `;
 
     L.marker(fc,{icon}).addTo(map).bindPopup(popupContent, {maxWidth: 280});

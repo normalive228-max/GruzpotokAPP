@@ -152,6 +152,14 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
 .parse-preview{background:var(--bg3);border-radius:var(--rs);padding:12px;margin-top:10px;font-size:12px;display:none}
 .parse-preview.show{display:block}
 .parse-preview .pf{margin-bottom:4px;color:var(--text2)}.parse-preview .pf strong{color:var(--text)}
+/* Препятствия */
+.obs-toggle{background:var(--bg2)!important;color:var(--text2)!important;border:1px solid var(--border)!important;white-space:nowrap}
+.obs-toggle.active{background:rgba(224,80,80,0.15)!important;color:var(--red)!important;border-color:rgba(224,80,80,0.4)!important}
+.obs-toolbar{position:absolute;top:58px;left:10px;right:10px;z-index:1000;display:none;gap:6px;flex-wrap:wrap}
+.obs-toolbar.show{display:flex}
+.obs-tbtn{background:var(--bg2);color:var(--text2);border:1px solid var(--border);border-radius:var(--rs);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Golos Text',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.obs-tbtn.sel{background:rgba(224,80,80,0.15);color:var(--red);border-color:rgba(224,80,80,0.4)}
+.obs-tbtn.ok{background:rgba(61,186,122,0.15);color:var(--green);border-color:rgba(61,186,122,0.3)}
 /* Корзина и избранное */
 #trash-view{height:100%;overflow-y:auto;padding:10px;flex-direction:column;gap:8px;display:none}
 #trash-view::-webkit-scrollbar{width:3px}
@@ -197,9 +205,6 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
   </div>
   <div class="sbar">
     <div class="si2"><div class="sv" id="st">9</div><div class="sl">заявок</div></div>
-    <div class="si2"><div class="sv" id="stons">5670 т</div><div class="sl">тоннаж</div></div>
-    <div class="si2"><div class="sv" id="sprice">1&nbsp;983₽</div><div class="sl">ср. цена/т</div></div>
-    <div class="si2"><div class="sv" id="surg">0</div><div class="sl">срочных</div></div>
   </div>
   <div id="bulk-bar" style="background:var(--bg3);padding:6px 12px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end">
     <button onclick="deleteAllExceptFavorites()" style="background:rgba(224,80,80,0.12);color:var(--red);border:1px solid rgba(224,80,80,0.25);font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--rs);cursor:pointer;font-family:'Golos Text',sans-serif">🗑 Удалить все кроме ⭐</button>
@@ -479,18 +484,20 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
     <div id="map-view" style="display: none;">
       <div class="map-searchbar">
         <input type="text" id="map-search" placeholder="слобода Дячкино, Тарасовский район..." onkeydown="if(event.key===&#39;Enter&#39;)geocodeSearch()">
+        <button class="obs-toggle" id="obs-toggle-btn" onclick="toggleObstacleMode()">🚧</button>
         <button onclick="geocodeSearch()">Найти</button>
+      </div>
+      <div class="obs-toolbar" id="obs-toolbar">
+        <button class="obs-tbtn" id="obs-point-btn" onclick="setObsDrawType(&#39;point&#39;)">📍 Точка</button>
+        <button class="obs-tbtn" id="obs-seg-btn" onclick="setObsDrawType(&#39;segment&#39;)">〰️ Участок</button>
+        <button class="obs-tbtn ok" id="obs-finish-btn" onclick="finishSegment()" style="display:none">✅ Завершить</button>
+        <button class="obs-tbtn" onclick="cancelObstacleMode()" style="margin-left:auto">❌ Отмена</button>
       </div>
       <div class="map-geocoding" id="geocoding-indicator">
         <div class="spin-sm"></div>
         <span>Определяю координаты...</span>
       </div>
       <div id="map"></div>
-      <div class="map-legend">
-        <div><div class="dot" style="background:#f0a500"></div> Обычная заявка</div>
-        <div><div class="dot" style="background:#e05050"></div> Срочная заявка</div>
-        <div><div class="dot" style="background:#3dba7a"></div> Взята / выполнена</div>
-      </div>
     </div>
     <div id="trash-view"></div>
   </div>
@@ -604,6 +611,32 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
     </div>
     <button class="bsec" style="width:100%;margin-top:8px;font-size:12px;padding:8px" onclick="clearGeocodeCache()">🗺 Сбросить кеш геокодирования</button>
     <div class="set-hint">Нажми если добавил Яндекс ключ, а адреса остались ненайденными — заставит попробовать снова.</div>
+  </div>
+</div>
+<div class="mo" id="obstacle-modal">
+  <div class="mdl">
+    <div class="mh"></div>
+    <h3>🚧 Новое препятствие</h3>
+    <div class="mf">
+      <label>Тип препятствия</label>
+      <select id="obs-type" onchange="onObsTypeChange()" style="width:100%;font-size:14px;padding:9px 12px">
+        <option value="bridge">🌉 Мост (ограничение по весу)</option>
+        <option value="road">🚧 Плохое покрытие</option>
+        <option value="other">⚠️ Другое препятствие</option>
+      </select>
+    </div>
+    <div class="mf" id="obs-weight-field">
+      <label>Максимальная грузоподъёмность (т)</label>
+      <input type="number" id="obs-weight" placeholder="Например: 5">
+    </div>
+    <div class="mf">
+      <label>Описание</label>
+      <textarea id="obs-note" rows="2" placeholder="Например: деревянный мост, грузовикам запрещён проезд..."></textarea>
+    </div>
+    <div class="macts">
+      <button class="bsec" onclick="closeObstacleForm()">Отмена</button>
+      <button class="bp" onclick="saveObstacle()">Сохранить</button>
+    </div>
   </div>
 </div>
 <div class="toast" id="toast">✅ Добавлено 8 новых заявок</div>
@@ -1596,14 +1629,7 @@ async function updateMapStatuses(data) {
 function renderOrders(){
   const data = getFiltered();
   const el = document.getElementById('list-view');
-  const tons = data.reduce((a,o)=>a+(+o.weight||0),0);
-  const prices = data.filter(o=>o.priceNoVat||o.price).map(o=>o.priceNoVat||o.price);
-  const avgP = prices.length ? Math.round(prices.reduce((a,b)=>a+b,0)/prices.length) : 0;
-  const urg = data.filter(o=>o.urgent).length;
   document.getElementById('st').textContent = data.length;
-  document.getElementById('stons').textContent = tons ? tons+' т' : '—';
-  document.getElementById('sprice').textContent = avgP ? avgP.toLocaleString('ru')+'₽' : '—';
-  document.getElementById('surg').textContent = urg;
   document.getElementById('cbadge').textContent = orders.length+' заявок';
 
   if(!data.length){
@@ -1683,7 +1709,9 @@ function initMap(){
     maxZoom:19,
     attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(map);
+  map.on('click', onMapClickObstacle);
   renderMap();
+  renderObstaclesOnMap();
 }
 
 let _mapTimer = null;
@@ -1773,6 +1801,162 @@ async function geocodeSearch(){
     L.popup().setLatLng(result.coords).setContent(`<div class="pr">📍 ${q}</div><div class="paddr">${result.displayName}</div>`).openOn(map);
   } else { toast('Адрес не найден. Уточни запрос.'); }
 }
+
+// ===================== ПРЕПЯТСТВИЯ =====================
+let obstacles = JSON.parse(localStorage.getItem('gp_obstacles') || '[]');
+function saveObstacles(){ localStorage.setItem('gp_obstacles', JSON.stringify(obstacles)); }
+
+let obstacleModeActive = false;
+let obstacleDrawType = null; // 'point' | 'segment'
+let segmentPoints = [];
+let segmentPreview = null;
+let pendingObsData = null;
+let obstacleLayerGroup = null;
+
+function toggleObstacleMode(){
+  if(obstacleModeActive){ cancelObstacleMode(); return; }
+  obstacleModeActive = true;
+  document.getElementById('obs-toggle-btn').classList.add('active');
+  document.getElementById('obs-toolbar').classList.add('show');
+}
+
+function setObsDrawType(type){
+  obstacleDrawType = type;
+  document.getElementById('obs-point-btn').classList.toggle('sel', type==='point');
+  document.getElementById('obs-seg-btn').classList.toggle('sel', type==='segment');
+  segmentPoints = [];
+  if(segmentPreview){ map.removeLayer(segmentPreview); segmentPreview = null; }
+  document.getElementById('obs-finish-btn').style.display = 'none';
+  if(map) map.getContainer().style.cursor = 'crosshair';
+}
+
+function cancelObstacleMode(){
+  obstacleModeActive = false; obstacleDrawType = null; segmentPoints = [];
+  if(segmentPreview){ map.removeLayer(segmentPreview); segmentPreview = null; }
+  document.getElementById('obs-toggle-btn').classList.remove('active');
+  document.getElementById('obs-toolbar').classList.remove('show');
+  document.getElementById('obs-finish-btn').style.display = 'none';
+  document.getElementById('obs-point-btn').classList.remove('sel');
+  document.getElementById('obs-seg-btn').classList.remove('sel');
+  if(map) map.getContainer().style.cursor = '';
+}
+
+function onMapClickObstacle(e){
+  if(!obstacleModeActive) return;
+  if(!obstacleDrawType){ toast('Выбери тип: 📍 Точка или 〰️ Участок'); return; }
+  if(obstacleDrawType === 'point'){
+    pendingObsData = { type:'point', coords:[e.latlng.lat, e.latlng.lng] };
+    openObstacleForm(); return;
+  }
+  // segment
+  segmentPoints.push([e.latlng.lat, e.latlng.lng]);
+  if(segmentPreview) map.removeLayer(segmentPreview);
+  if(segmentPoints.length === 1){
+    segmentPreview = L.circleMarker(segmentPoints[0], {radius:6, color:'#e05050', fillColor:'#e05050', fillOpacity:1, weight:2}).addTo(map);
+  } else {
+    segmentPreview = L.polyline(segmentPoints, {color:'#e05050', dashArray:'8,6', weight:4, opacity:0.85}).addTo(map);
+    document.getElementById('obs-finish-btn').style.display = 'inline-flex';
+  }
+}
+
+function finishSegment(){
+  if(segmentPoints.length < 2){ toast('Добавь хотя бы 2 точки на карте'); return; }
+  pendingObsData = { type:'segment', points:[...segmentPoints] };
+  if(segmentPreview){ map.removeLayer(segmentPreview); segmentPreview = null; }
+  segmentPoints = []; document.getElementById('obs-finish-btn').style.display = 'none';
+  openObstacleForm();
+}
+
+function openObstacleForm(){
+  document.getElementById('obs-type').value = 'bridge';
+  document.getElementById('obs-weight').value = '';
+  document.getElementById('obs-note').value = '';
+  onObsTypeChange();
+  document.getElementById('obstacle-modal').classList.add('open');
+}
+
+function closeObstacleForm(){
+  document.getElementById('obstacle-modal').classList.remove('open');
+  pendingObsData = null;
+  if(obstacleDrawType === 'segment'){
+    segmentPoints = [];
+    if(segmentPreview){ map.removeLayer(segmentPreview); segmentPreview = null; }
+    document.getElementById('obs-finish-btn').style.display = 'none';
+  }
+}
+
+function onObsTypeChange(){
+  const t = document.getElementById('obs-type').value;
+  document.getElementById('obs-weight-field').style.display = t==='bridge' ? 'block' : 'none';
+}
+
+function saveObstacle(){
+  if(!pendingObsData) return;
+  const obs = {
+    id: Date.now() + Math.random(),
+    drawType: pendingObsData.type,
+    coords: pendingObsData.coords || null,
+    points: pendingObsData.points || null,
+    obstacleType: document.getElementById('obs-type').value,
+    weightLimit: parseFloat(document.getElementById('obs-weight').value) || null,
+    note: document.getElementById('obs-note').value.trim(),
+    created: new Date().toLocaleDateString('ru',{day:'2-digit',month:'2-digit',year:'2-digit'})
+  };
+  obstacles.push(obs); saveObstacles();
+  document.getElementById('obstacle-modal').classList.remove('open');
+  pendingObsData = null;
+  renderObstaclesOnMap(); toast('✅ Препятствие сохранено');
+}
+
+function deleteObstacle(id){
+  if(!confirm('Удалить это препятствие?')) return;
+  obstacles = obstacles.filter(o => o.id !== id); saveObstacles();
+  renderObstaclesOnMap(); if(map) map.closePopup(); toast('Препятствие удалено');
+}
+
+function renderObstaclesOnMap(){
+  if(!map) return;
+  if(obstacleLayerGroup) map.removeLayer(obstacleLayerGroup);
+  obstacleLayerGroup = L.layerGroup().addTo(map);
+
+  const emojiMap = { bridge:'🌉', road:'🚧', other:'⚠️' };
+  const colorMap = { bridge:'#e05050', road:'#f0a500', other:'#e05050' };
+  const labelMap = { bridge:'Мост', road:'Плохое покрытие', other:'Препятствие' };
+
+  obstacles.forEach(obs => {
+    const emoji = emojiMap[obs.obstacleType]||'⚠️';
+    const color = colorMap[obs.obstacleType]||'#e05050';
+    const label = labelMap[obs.obstacleType]||'Препятствие';
+    const wStr = obs.weightLimit ? `, макс. ${obs.weightLimit} т` : '';
+    const popup = `
+      <div class="pr" style="color:${color}">${emoji} ${label}${wStr}</div>
+      ${obs.note?`<div class="prow" style="margin-bottom:4px">${obs.note}</div>`:''}
+      <div class="paddr">Добавлено: ${obs.created}</div>
+      <button onclick="deleteObstacle(${obs.id})" style="margin-top:8px;background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:4px 10px;border-radius:var(--rs);cursor:pointer;width:100%;font-family:'Golos Text',sans-serif">🗑 Удалить</button>`;
+
+    if(obs.drawType === 'point' && obs.coords){
+      const icon = L.divIcon({
+        className:'',
+        html:`<div style="background:${color};color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fff;box-shadow:0 2px 8px ${color}88;cursor:pointer">${emoji}</div>`,
+        iconSize:[30,30], iconAnchor:[15,15]
+      });
+      L.marker(obs.coords, {icon}).bindPopup(popup, {maxWidth:240}).addTo(obstacleLayerGroup);
+    } else if(obs.drawType === 'segment' && obs.points){
+      L.polyline(obs.points, {color, weight:5, dashArray:'10,7', opacity:0.9})
+        .bindPopup(popup, {maxWidth:240}).addTo(obstacleLayerGroup);
+      // Иконка-метка в середине участка
+      const mid = obs.points[Math.floor(obs.points.length/2)];
+      const midIcon = L.divIcon({
+        className:'',
+        html:`<div style="background:${color};color:#fff;border-radius:4px;padding:2px 6px;font-size:12px;border:1px solid #fff;box-shadow:0 1px 6px ${color}88;white-space:nowrap;cursor:pointer">${emoji}</div>`,
+        iconAnchor:[12,10]
+      });
+      L.marker(mid, {icon:midIcon}).bindPopup(popup, {maxWidth:240}).addTo(obstacleLayerGroup);
+    }
+  });
+}
+
+document.getElementById('obstacle-modal').addEventListener('click', function(e){ if(e.target===this) closeObstacleForm(); });
 
 // ===================== ФОРМА ДОБАВЛЕНИЯ =====================
 function openModal(){ document.getElementById('mdate').value=new Date().toISOString().split('T')[0]; document.getElementById('modal').classList.add('open'); }

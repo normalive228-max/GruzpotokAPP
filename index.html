@@ -2112,9 +2112,46 @@ async function fetchOSRMRoute(pts){
   return{lineCoords:data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),distKm:Math.round(data.routes[0].distance/1000)};
 }
 
-// OSRM + автообъезд: находим препятствия → добавляем перпендикулярные waypoints → перестраиваем
+// Запрос маршрута через Яндекс Маршрутизатор
+async function fetchYandexRoute(pts){
+  const key=CFG.yandexKey;
+  if(!key) return null;
+  try{
+    // Яндекс: lon,lat через запятую, точки через |
+    const wps=pts.map(c=>`${c[1].toFixed(6)},${c[0].toFixed(6)}`).join('|');
+    const url=`https://router.api.yandex.net/v2/route?apikey=${key}&waypoints=${encodeURIComponent(wps)}&type=driving&lang=ru_RU`;
+    const res=await fetch(url,{referrerPolicy:'unsafe-url',referrer:'https://normalive228-max.github.io/'});
+    if(!res.ok) return null;
+    const data=await res.json();
+    if(!data.route) return null;
+    const r=data.route;
+    const distKm=Math.round((r.distance?.value||0)/1000);
+    let coords=[];
+    // Геометрия может быть на уровне route или legs
+    if(r.geometry?.type==='LineString'){
+      coords=r.geometry.coordinates.map(c=>[c[1],c[0]]);
+    } else if(r.legs?.length){
+      for(const leg of r.legs){
+        if(leg.geometry?.type==='LineString') coords.push(...leg.geometry.coordinates.map(c=>[c[1],c[0]]));
+        else if(leg.steps?.length) for(const s of leg.steps) if(s.geometry?.coordinates?.length) coords.push(...s.geometry.coordinates.map(c=>[c[1],c[0]]));
+      }
+    }
+    if(coords.length<2) return null;
+    return{lineCoords:coords,distKm,engine:'Яндекс'};
+  }catch(e){console.warn('Яндекс маршрутизатор:',e);return null;}
+}
+
+// Универсальный запрос: Яндекс → OSRM
+async function fetchRoute(pts){
+  const y=await fetchYandexRoute(pts);
+  if(y) return y;
+  const o=await fetchOSRMRoute(pts);
+  return o?{...o,engine:'OSRM'}:null;
+}
+
+// Роутер + автообъезд: находим препятствия → добавляем перпендикулярные waypoints → перестраиваем
 async function buildOSRMDetour(f,t){
-  const base=await fetchOSRMRoute([f,...routeWaypoints,t]);
+  const base=await fetchRoute([f,...routeWaypoints,t]);
   if(!base) throw new Error('Маршрут не найден');
   if(!obstacles.length) return{...base,autoDetoured:false};
 
@@ -2155,7 +2192,7 @@ async function buildOSRMDetour(f,t){
   for(const side of[1,-1]){
     try{
       const wps=makeWps(side);
-      const route=await fetchOSRMRoute([f,...wps,...routeWaypoints,t]);
+      const route=await fetchRoute([f,...wps,...routeWaypoints,t]);
       if(!route) continue;
       if(!checkRouteObstacles(route.lineCoords).length) return{...route,autoDetoured:true};
     }catch(e){}
@@ -2208,7 +2245,8 @@ async function buildRoute(orderId){
 
     const warnEl=document.getElementById('route-obs-warn');
     if(autoDetoured){
-      warnEl.innerHTML='✅ Маршрут объезжает препятствия';
+      const eng=result.engine||'OSRM';
+      warnEl.innerHTML=`✅ Маршрут объезжает препятствия <span style="opacity:.75;font-size:10px">(${eng})</span>`;
       warnEl.style.background='rgba(61,186,122,0.88)';warnEl.style.display='block';
     } else {
       const warns=checkRouteObstacles(lineCoords);

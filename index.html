@@ -498,6 +498,14 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
         <span>Определяю координаты...</span>
       </div>
       <div id="map"></div>
+      <div id="route-panel" style="position:absolute;bottom:20px;right:10px;z-index:1001;display:none;flex-direction:column;gap:6px;align-items:flex-end;max-width:230px">
+        <div id="route-obs-warn" style="background:rgba(200,50,50,0.92);color:#fff;border-radius:var(--rs);padding:8px 10px;font-size:11px;font-weight:600;line-height:1.5;display:none;backdrop-filter:blur(4px)"></div>
+        <div style="display:flex;gap:6px">
+          <button id="waypoint-mode-btn" onclick="toggleWaypointMode()" style="background:var(--bg2);color:#4a9eff;border:1px solid rgba(74,158,255,0.4);border-radius:var(--rs);padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Golos Text',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.5)">📍 Добавить объезд</button>
+          <button onclick="clearRoute()" style="background:var(--bg2);color:var(--red);border:1px solid rgba(224,80,80,0.4);border-radius:var(--rs);padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Golos Text',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.5)">✕ Убрать</button>
+        </div>
+        <button id="clear-wp-btn" onclick="clearWaypoints()" style="display:none;background:var(--bg2);color:var(--text2);border:1px solid var(--border);border-radius:var(--rs);padding:5px 10px;font-size:11px;cursor:pointer;font-family:'Golos Text',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.5)">🔄 Сбросить точки объезда</button>
+      </div>
     </div>
     <div id="trash-view"></div>
   </div>
@@ -611,6 +619,19 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
     </div>
     <button class="bsec" style="width:100%;margin-top:8px;font-size:12px;padding:8px" onclick="clearGeocodeCache()">🗺 Сбросить кеш геокодирования</button>
     <div class="set-hint">Нажми если добавил Яндекс ключ, а адреса остались ненайденными — заставит попробовать снова.</div>
+
+    <div class="set-section" style="margin-top:18px">
+      <div class="set-title">🛣 Маршрутизация с объездом (OpenRouteService)</div>
+      <div class="set-row">
+        <label>ORS API Key</label>
+        <input id="cfg-ors" type="password" placeholder="5b3ce3597851110...">
+      </div>
+      <div class="set-hint">Бесплатный ключ: <strong>openrouteservice.org</strong> → Sign Up → скопируй токен. 2 000 запросов/день бесплатно. С ключом маршрут строится автоматически в объезд всех твоих препятствий на карте.</div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+        <button class="bsec" style="flex:1;font-size:12px;padding:8px" onclick="testOrsKey()">Проверить ключ</button>
+        <div class="conn-status" id="ors-status"><div class="status-dot idle" id="ors-dot"></div><span id="ors-status-text">Не проверено</span></div>
+      </div>
+    </div>
   </div>
 </div>
 <div class="mo" id="obstacle-modal">
@@ -1321,6 +1342,7 @@ function openSettings() {
   document.getElementById('cfg-aikey').value = CFG.aiKey || '';
   document.getElementById('cfg-yandex').value = CFG.yandexKey || '';
   document.getElementById('cfg-boturl').value = CFG.botUrl || '';
+  document.getElementById('cfg-ors').value = CFG.orsKey || '';
   document.getElementById('settings-modal').classList.add('open');
 }
 function closeSettings() { document.getElementById('settings-modal').classList.remove('open'); }
@@ -1332,6 +1354,7 @@ function saveSettings() {
   CFG.aiKey = document.getElementById('cfg-aikey').value.trim();
   CFG.yandexKey = document.getElementById('cfg-yandex').value.trim();
   CFG.botUrl = document.getElementById('cfg-boturl').value.trim();
+  CFG.orsKey = document.getElementById('cfg-ors').value.trim();
   saveCfg();
   closeSettings();
   toast('✅ Настройки сохранены');
@@ -1373,6 +1396,19 @@ async function testYandexKey() {
       dot.className = 'status-dot err'; txt.textContent = 'Неверный ключ или домен не разрешён';
     }
   } catch(e) { dot.className = 'status-dot err'; txt.textContent = 'Ошибка: ' + e.message; }
+}
+
+async function testOrsKey(){
+  const key = document.getElementById('cfg-ors').value.trim();
+  const dot = document.getElementById('ors-dot');
+  const txt = document.getElementById('ors-status-text');
+  txt.textContent='Проверяю...'; dot.className='status-dot idle';
+  if(!key){ dot.className='status-dot err'; txt.textContent='Введи ключ'; return; }
+  try {
+    const res = await fetch(`https://api.openrouteservice.org/v2/directions/driving-hgv?api_key=${key}&start=37.6173,55.7558&end=30.3141,59.9386`);
+    if(res.ok){ dot.className='status-dot ok'; txt.textContent='Ключ работает ✓'; }
+    else { const d=await res.json(); dot.className='status-dot err'; txt.textContent=d.error?.message||'Неверный ключ'; }
+  } catch(e){ dot.className='status-dot err'; txt.textContent='Ошибка: '+e.message; }
 }
 
 function resetOffset() {
@@ -1844,6 +1880,7 @@ function cancelObstacleMode(){
 }
 
 function onMapClickObstacle(e){
+  if(waypointModeActive){ addWaypoint(e.latlng); return; }
   if(!obstacleModeActive) return;
   if(!obstacleDrawType){ toast('Выбери тип: 📍 Точка или 〰️ Участок'); return; }
   if(obstacleDrawType === 'point'){
@@ -1962,76 +1999,183 @@ document.getElementById('obstacle-modal').addEventListener('click', function(e){
 
 // ===================== МАРШРУТЫ =====================
 let routeLayer = null;
+let routeWaypoints = [];
+let waypointModeActive = false;
+let currentRouteOrderId = null;
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000,r=Math.PI/180;
+  const a=Math.sin((lat2-lat1)*r/2)**2+Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin((lon2-lon1)*r/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+// Создаём круговой полигон вокруг точки (GeoJSON: [lon,lat])
+function circlePolygon(lat,lon,radiusM,n=16){
+  const R=6371000,r=Math.PI/180;
+  const pts=[];
+  for(let i=0;i<=n;i++){
+    const a=(2*Math.PI*i)/n;
+    pts.push([lon+(radiusM/R/Math.cos(lat*r))/r*Math.sin(a), lat+(radiusM/R)/r*Math.cos(a)]);
+  }
+  return pts;
+}
+
+// Строим список avoid-полигонов из всех препятствий
+function buildAvoidPolygons(){
+  const rings=[];
+  for(const obs of obstacles){
+    if(obs.drawType==='point'&&obs.coords){
+      rings.push(circlePolygon(obs.coords[0],obs.coords[1],250));
+    } else if(obs.drawType==='segment'&&obs.points){
+      // Кружок на каждой точке + на серединах отрезков
+      for(const pt of obs.points) rings.push(circlePolygon(pt[0],pt[1],120));
+      for(let i=0;i<obs.points.length-1;i++){
+        const mid=[(obs.points[i][0]+obs.points[i+1][0])/2,(obs.points[i][1]+obs.points[i+1][1])/2];
+        rings.push(circlePolygon(mid[0],mid[1],120));
+      }
+    }
+  }
+  return rings;
+}
+
+function checkRouteObstacles(routeCoords){
+  const THRESHOLD=150;
+  const hits=[];
+  for(const obs of obstacles){
+    const pts=obs.drawType==='point'?[obs.coords]:obs.points;
+    let hit=false;
+    outer:for(const oc of pts) for(const rc of routeCoords) if(haversine(rc[0],rc[1],oc[0],oc[1])<THRESHOLD){hit=true;break outer;}
+    if(hit){ const em={bridge:'🌉',road:'🚧',other:'⚠️'}[obs.obstacleType]||'⚠️'; hits.push(em+(obs.weightLimit?` макс.${obs.weightLimit}т`:'')+(obs.note?' — '+obs.note:'')); }
+  }
+  return hits;
+}
+
+function clearRoute(){
+  if(routeLayer){map.removeLayer(routeLayer);routeLayer=null;}
+  routeWaypoints=[];currentRouteOrderId=null;waypointModeActive=false;
+  if(map&&!obstacleModeActive)map.getContainer().style.cursor='';
+  document.getElementById('route-panel').style.display='none';
+  const wpBtn=document.getElementById('waypoint-mode-btn');
+  if(wpBtn){wpBtn.textContent='📍 Добавить объезд';wpBtn.style.color='#4a9eff';}
+}
+
+function toggleWaypointMode(){
+  waypointModeActive=!waypointModeActive;
+  const btn=document.getElementById('waypoint-mode-btn');
+  if(waypointModeActive){
+    btn.textContent='✕ Отмена';btn.style.color='var(--red)';
+    map.getContainer().style.cursor='crosshair';
+    toast('Кликни на карте — маршрут перестроится через эту точку');
+  } else {
+    btn.textContent='📍 Добавить объезд';btn.style.color='#4a9eff';
+    if(!obstacleModeActive)map.getContainer().style.cursor='';
+  }
+}
+
+function addWaypoint(latlng){
+  routeWaypoints.push([latlng.lat,latlng.lng]);
+  waypointModeActive=false;
+  const btn=document.getElementById('waypoint-mode-btn');
+  if(btn){btn.textContent='📍 Добавить объезд';btn.style.color='#4a9eff';}
+  if(!obstacleModeActive)map.getContainer().style.cursor='';
+  if(currentRouteOrderId)buildRoute(currentRouteOrderId);
+}
+
+function removeWaypoint(idx){routeWaypoints.splice(idx,1);if(currentRouteOrderId)buildRoute(currentRouteOrderId);}
+function clearWaypoints(){routeWaypoints=[];document.getElementById('clear-wp-btn').style.display='none';if(currentRouteOrderId)buildRoute(currentRouteOrderId);}
+
+function drawRouteOnMap(f,t,lineCoords){
+  if(routeLayer)map.removeLayer(routeLayer);
+  routeLayer=L.layerGroup().addTo(map);
+  L.polyline(lineCoords,{color:'#4a9eff',weight:5,opacity:0.85}).addTo(routeLayer);
+  const dot=(col)=>L.divIcon({className:'',html:`<div style="width:13px;height:13px;border-radius:50%;background:${col};border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.5)"></div>`,iconSize:[13,13],iconAnchor:[6,6]});
+  L.marker(f,{icon:dot('#3dba7a'),zIndexOffset:10}).addTo(routeLayer);
+  L.marker(t,{icon:dot('#e05050'),zIndexOffset:10}).addTo(routeLayer);
+  routeWaypoints.forEach((wp,i)=>{
+    const wIcon=L.divIcon({className:'',html:`<div style="width:20px;height:20px;border-radius:50%;background:#4a9eff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;box-shadow:0 1px 6px rgba(0,0,0,.5);cursor:pointer">${i+1}</div>`,iconSize:[20,20],iconAnchor:[10,10]});
+    L.marker(wp,{icon:wIcon}).bindPopup(`<div class="prow" style="margin-bottom:6px">Точка объезда ${i+1}</div><button onclick="removeWaypoint(${i});map.closePopup()" style="background:rgba(224,80,80,0.15);color:var(--red);border:1px solid rgba(224,80,80,0.3);font-size:11px;padding:4px 10px;border-radius:var(--rs);cursor:pointer;width:100%;font-family:'Golos Text',sans-serif">✕ Убрать</button>`).addTo(routeLayer);
+  });
+  map.fitBounds(L.polyline(lineCoords).getBounds(),{padding:[50,50]});
+}
 
 async function buildRoute(orderId){
-  const o = orders.find(x => x.id === orderId);
-  if(!o) return;
+  currentRouteOrderId=orderId;
+  const o=orders.find(x=>x.id===orderId); if(!o)return;
+  const btn=document.getElementById('route-btn-'+orderId);
+  const distEl=document.getElementById('route-dist-'+orderId);
+  if(btn){btn.textContent='⏳ Строю маршрут...';btn.disabled=true;}
 
-  const btn = document.getElementById('route-btn-' + orderId);
-  const distEl = document.getElementById('route-dist-' + orderId);
-  if(btn){ btn.textContent = '⏳ Строю маршрут...'; btn.disabled = true; }
-
-  // Геокодируем оба адреса (используем кеш если уже есть)
-  const [fromRes, toRes] = await Promise.all([
-    geocodeAddress(o.from),
-    geocodeAddress(o.to)
-  ]);
-
-  if(!fromRes || !toRes){
-    toast('❌ Не удалось определить ' + (!fromRes ? 'место погрузки' : 'место выгрузки'));
-    if(btn){ btn.textContent = '🗺 Построить маршрут'; btn.disabled = false; }
-    return;
+  const [fromRes,toRes]=await Promise.all([geocodeAddress(o.from),geocodeAddress(o.to)]);
+  if(!fromRes||!toRes){
+    toast('❌ Не удалось определить '+(!fromRes?'место погрузки':'место выгрузки'));
+    if(btn){btn.textContent='🗺 Построить маршрут';btn.disabled=false;} return;
   }
 
-  try {
-    const f = fromRes.coords; // [lat, lon]
-    const t = toRes.coords;
-    const url = `https://router.project-osrm.org/route/v1/driving/${f[1]},${f[0]};${t[1]},${t[0]}?overview=full&geometries=geojson`;
-    const res = await fetch(url);
-    const data = await res.json();
+  try{
+    const f=fromRes.coords, t=toRes.coords;
+    const orsKey=CFG.orsKey;
+    const avoidRings=obstacles.length?buildAvoidPolygons():[];
+    let distKm, lineCoords, usedORS=false;
 
-    if(data.code !== 'Ok' || !data.routes || !data.routes.length){
-      toast('❌ Маршрут между этими точками не найден');
-      if(btn){ btn.textContent = '🗺 Построить маршрут'; btn.disabled = false; }
-      return;
+    if(orsKey && avoidRings.length){
+      // ORS с автообъездом препятствий
+      try{
+        const allPts=[f,...routeWaypoints,t];
+        const body={
+          coordinates:allPts.map(c=>[c[1],c[0]]),
+          options:{avoid_polygons:{type:'MultiPolygon',coordinates:avoidRings.map(r=>[r])}}
+        };
+        const res=await fetch('https://api.openrouteservice.org/v2/directions/driving-hgv/geojson',{
+          method:'POST',
+          headers:{'Authorization':orsKey,'Content-Type':'application/json'},
+          body:JSON.stringify(body)
+        });
+        if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'ORS '+res.status);}
+        const data=await res.json();
+        const feat=data.features[0];
+        distKm=Math.round(feat.properties.summary.distance/1000);
+        lineCoords=feat.geometry.coordinates.map(c=>[c[1],c[0]]);
+        usedORS=true;
+      }catch(orsErr){
+        console.warn('ORS failed, fallback OSRM:',orsErr);
+        toast('⚠️ ORS недоступен, строю через OSRM без объезда');
+      }
     }
 
-    const route = data.routes[0];
-    const distKm = Math.round(route.distance / 1000);
-    const lineCoords = route.geometry.coordinates.map(c => [c[1], c[0]]);
-
-    // Убираем предыдущий маршрут
-    if(routeLayer) map.removeLayer(routeLayer);
-    routeLayer = L.layerGroup().addTo(map);
-
-    // Линия маршрута
-    L.polyline(lineCoords, {color:'#4a9eff', weight:5, opacity:0.85}).addTo(routeLayer);
-
-    // Маркеры начала и конца
-    const ptStyle = (col) => ({
-      className:'',
-      html:`<div style="width:12px;height:12px;border-radius:50%;background:${col};border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.5)"></div>`,
-      iconSize:[12,12], iconAnchor:[6,6]
-    });
-    L.marker(f, {icon: L.divIcon({...ptStyle('#3dba7a')})}).addTo(routeLayer);
-    L.marker(t, {icon: L.divIcon({...ptStyle('#e05050')})}).addTo(routeLayer);
-
-    // Вписываем карту под маршрут
-    map.fitBounds(L.polyline(lineCoords).getBounds(), {padding:[50,50]});
-
-    // Обновляем кнопку и показываем расстояние
-    if(btn){
-      btn.textContent = `🗺 Перестроить маршрут`;
-      btn.disabled = false;
-    }
-    if(distEl){
-      distEl.textContent = `📏 По дорогам: ${distKm} км`;
-      distEl.style.display = 'block';
+    if(!lineCoords){
+      // OSRM — без автообъезда
+      const allPts=[f,...routeWaypoints,t];
+      const coordStr=allPts.map(c=>`${c[1]},${c[0]}`).join(';');
+      const res=await fetch(`https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`);
+      const data=await res.json();
+      if(data.code!=='Ok'||!data.routes?.length)throw new Error('Маршрут не найден');
+      distKm=Math.round(data.routes[0].distance/1000);
+      lineCoords=data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
     }
 
-  } catch(e) {
-    toast('❌ Ошибка при построении маршрута');
-    if(btn){ btn.textContent = '🗺 Построить маршрут'; btn.disabled = false; }
+    drawRouteOnMap(f,t,lineCoords);
+    if(btn){btn.textContent='🗺 Перестроить маршрут';btn.disabled=false;}
+    if(distEl){distEl.textContent=`📏 По дорогам: ${distKm} км`;distEl.style.display='block';}
+    document.getElementById('route-panel').style.display='flex';
+    document.getElementById('clear-wp-btn').style.display=routeWaypoints.length?'block':'none';
+
+    // Статус на панели
+    const warnEl=document.getElementById('route-obs-warn');
+    if(usedORS && obstacles.length){
+      warnEl.innerHTML=`✅ Маршрут объезжает ${obstacles.length} препятствий`;
+      warnEl.style.background='rgba(61,186,122,0.88)';warnEl.style.display='block';
+    } else {
+      const warns=checkRouteObstacles(lineCoords);
+      if(warns.length){
+        warnEl.innerHTML='⚠️ Маршрут проходит через:<br>'+warns.map(w=>`• ${w}`).join('<br>')+(orsKey?'':'\n<span style="opacity:.8;font-size:10px">Добавь ORS-ключ в ⚙️ для автообъезда</span>');
+        warnEl.style.background='rgba(200,50,50,0.92)';warnEl.style.display='block';
+      } else {
+        warnEl.style.display='none';
+      }
+    }
+  }catch(e){
+    console.error(e);toast('❌ Ошибка: '+e.message);
+    if(btn){btn.textContent='🗺 Построить маршрут';btn.disabled=false;}
   }
 }
 

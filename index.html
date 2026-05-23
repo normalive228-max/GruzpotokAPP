@@ -2044,13 +2044,13 @@ function buildAvoidPolygons(){
   const rings=[];
   for(const obs of obstacles){
     if(obs.drawType==='point'&&obs.coords){
-      rings.push(circlePolygon(obs.coords[0],obs.coords[1],250));
+      rings.push(circlePolygon(obs.coords[0],obs.coords[1],500)); // 500м — перекрывает мост/участок дороги
     } else if(obs.drawType==='segment'&&obs.points){
       // Кружок на каждой точке + на серединах отрезков
-      for(const pt of obs.points) rings.push(circlePolygon(pt[0],pt[1],120));
+      for(const pt of obs.points) rings.push(circlePolygon(pt[0],pt[1],300));
       for(let i=0;i<obs.points.length-1;i++){
         const mid=[(obs.points[i][0]+obs.points[i+1][0])/2,(obs.points[i][1]+obs.points[i+1][1])/2];
-        rings.push(circlePolygon(mid[0],mid[1],120));
+        rings.push(circlePolygon(mid[0],mid[1],300));
       }
     }
   }
@@ -2162,19 +2162,21 @@ async function buildRoute(orderId){
     if(!lineCoords && avoidRings.length){
       try{
         const locations=allPts.map(c=>({lat:c[0],lon:c[1],type:'break'}));
-        // конвертируем [lon,lat][] → [{lat,lon}][]
-        const excl=avoidRings.map(ring=>ring.map(pt=>({lat:pt[1],lon:pt[0]})));
-        const body={locations,costing:'auto',directions_options:{units:'km'},exclude_polygons:excl};
+        // avoidRings уже в формате [[lon,lat],...] — именно то, что нужно Valhalla
+        const body={locations,costing:'auto',directions_options:{units:'km'},exclude_polygons:avoidRings};
         const res=await fetch('https://valhalla1.openstreetmap.de/route',{
           method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
         });
-        if(!res.ok){const e=await res.json();throw new Error('Valhalla '+(e.error||res.status));}
+        if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error('Valhalla '+(e.error||res.status));}
         const data=await res.json();
         if(!data.trip?.legs?.length) throw new Error('Valhalla: нет маршрута');
         lineCoords=data.trip.legs.flatMap(l=>decodePolyline6(l.shape));
         distKm=Math.round(data.trip.summary.length);
         routeEngine='Valhalla';
-      }catch(vErr){ console.warn('Valhalla failed:',vErr); }
+      }catch(vErr){
+        console.warn('Valhalla failed:',vErr);
+        toast('⚠️ Сервер объезда недоступен, строю без объезда...');
+      }
     }
 
     // 3. OSRM — запасной вариант, всегда работает
@@ -2195,7 +2197,7 @@ async function buildRoute(orderId){
 
     const warnEl=document.getElementById('route-obs-warn');
     if(routeEngine!=='OSRM' && obstacles.length){
-      warnEl.innerHTML=`✅ Маршрут объезжает препятствия`;
+      warnEl.innerHTML=`✅ Маршрут объезжает препятствия <span style="opacity:.75;font-size:10px">(${routeEngine})</span>`;
       warnEl.style.background='rgba(61,186,122,0.88)';warnEl.style.display='block';
     } else if(routeEngine==='OSRM'){
       const warns=checkRouteObstacles(lineCoords);

@@ -155,6 +155,12 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
 /* Препятствия */
 .obs-toggle{background:var(--bg2)!important;color:var(--text2)!important;border:1px solid var(--border)!important;white-space:nowrap}
 .obs-toggle.active{background:rgba(224,80,80,0.15)!important;color:var(--red)!important;border-color:rgba(224,80,80,0.4)!important}
+#obs-vis-bar{position:absolute;top:58px;left:10px;z-index:1000;display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rs);padding:5px 10px;box-shadow:0 2px 8px rgba(0,0,0,.4);font-size:12px;color:var(--text2)}
+#obs-vis-bar.hidden{display:none}
+.tog-track{width:34px;height:18px;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.tog-track.on{background:var(--accent)}
+.tog-thumb{position:absolute;top:2px;left:2px;width:12px;height:12px;background:#fff;border-radius:50%;transition:left .15s}
+.tog-track.on .tog-thumb{left:18px}
 .obs-toolbar{position:absolute;top:58px;left:10px;right:10px;z-index:1000;display:none;gap:6px;flex-wrap:wrap}
 .obs-toolbar.show{display:flex}
 .obs-tbtn{background:var(--bg2);color:var(--text2);border:1px solid var(--border);border-radius:var(--rs);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Golos Text',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.4)}
@@ -493,6 +499,10 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
         <button class="obs-tbtn ok" id="obs-finish-btn" onclick="finishSegment()" style="display:none">✅ Завершить</button>
         <button class="obs-tbtn" onclick="cancelObstacleMode()" style="margin-left:auto">❌ Отмена</button>
       </div>
+      <div id="obs-vis-bar">
+        <div id="obs-vis-track" class="tog-track on" onclick="toggleObstaclesVis()"><div class="tog-thumb"></div></div>
+        <span>Препятствия на карте</span>
+      </div>
       <div class="map-geocoding" id="geocoding-indicator">
         <div class="spin-sm"></div>
         <span>Определяю координаты...</span>
@@ -512,6 +522,7 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
           <button onclick="clearRoute()" style="background:var(--bg2);color:var(--red);border:1px solid rgba(224,80,80,0.4);border-radius:var(--rs);padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Golos Text',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.5)">✕ Убрать</button>
         </div>
         <button id="clear-wp-btn" onclick="clearWaypoints()" style="display:none;background:var(--bg2);color:var(--text2);border:1px solid var(--border);border-radius:var(--rs);padding:5px 10px;font-size:11px;cursor:pointer;font-family:'Golos Text',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.5)">🔄 Сбросить точки объезда</button>
+        <button id="yandex-route-btn" onclick="openInYandex()" style="display:none;background:rgba(61,186,122,0.15);color:var(--green);border:1px solid rgba(61,186,122,0.4);border-radius:var(--rs);padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Golos Text',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.5);width:100%">🗺 Открыть в Яндекс Картах</button>
       </div>
     </div>
     <div id="trash-view"></div>
@@ -1853,12 +1864,20 @@ let segmentPoints = [];
 let segmentPreview = null;
 let pendingObsData = null;
 let obstacleLayerGroup = null;
+let showObstaclesOnMap = true;
+
+function toggleObstaclesVis(){
+  showObstaclesOnMap = !showObstaclesOnMap;
+  document.getElementById('obs-vis-track').classList.toggle('on', showObstaclesOnMap);
+  renderObstaclesOnMap();
+}
 
 function toggleObstacleMode(){
   if(obstacleModeActive){ cancelObstacleMode(); return; }
   obstacleModeActive = true;
   document.getElementById('obs-toggle-btn').classList.add('active');
   document.getElementById('obs-toolbar').classList.add('show');
+  document.getElementById('obs-vis-bar').classList.add('hidden');
 }
 
 function setObsDrawType(type){
@@ -1876,6 +1895,7 @@ function cancelObstacleMode(){
   if(segmentPreview){ map.removeLayer(segmentPreview); segmentPreview = null; }
   document.getElementById('obs-toggle-btn').classList.remove('active');
   document.getElementById('obs-toolbar').classList.remove('show');
+  document.getElementById('obs-vis-bar').classList.remove('hidden');
   document.getElementById('obs-finish-btn').style.display = 'none';
   document.getElementById('obs-point-btn').classList.remove('sel');
   document.getElementById('obs-seg-btn').classList.remove('sel');
@@ -1959,6 +1979,8 @@ function deleteObstacle(id){
 function renderObstaclesOnMap(){
   if(!map) return;
   if(obstacleLayerGroup) map.removeLayer(obstacleLayerGroup);
+  obstacleLayerGroup = null;
+  if(!showObstaclesOnMap) return;
   obstacleLayerGroup = L.layerGroup().addTo(map);
 
   const emojiMap = { bridge:'🌉', road:'🚧', other:'⚠️' };
@@ -1970,6 +1992,7 @@ function renderObstaclesOnMap(){
     const color = colorMap[obs.obstacleType]||'#e05050';
     const label = labelMap[obs.obstacleType]||'Препятствие';
     const wStr = obs.weightLimit ? `, макс. ${obs.weightLimit} т` : '';
+    const name = obs.note || label;
     const popup = `
       <div class="pr" style="color:${color}">${emoji} ${label}${wStr}</div>
       ${obs.note?`<div class="prow" style="margin-bottom:4px">${obs.note}</div>`:''}
@@ -1979,19 +2002,21 @@ function renderObstaclesOnMap(){
     if(obs.drawType === 'point' && obs.coords){
       const icon = L.divIcon({
         className:'',
-        html:`<div style="background:${color};color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fff;box-shadow:0 2px 8px ${color}88;cursor:pointer">${emoji}</div>`,
-        iconSize:[30,30], iconAnchor:[15,15]
+        html:`<div style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer">
+          <div style="background:${color};color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fff;box-shadow:0 2px 8px ${color}88">${emoji}</div>
+          <div style="background:rgba(0,0,0,0.72);color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;white-space:nowrap;font-family:'Golos Text',sans-serif;max-width:120px;overflow:hidden;text-overflow:ellipsis">${name}</div>
+        </div>`,
+        iconSize:[30,44], iconAnchor:[15,15]
       });
       L.marker(obs.coords, {icon}).bindPopup(popup, {maxWidth:240}).addTo(obstacleLayerGroup);
     } else if(obs.drawType === 'segment' && obs.points){
       L.polyline(obs.points, {color, weight:5, dashArray:'10,7', opacity:0.9})
         .bindPopup(popup, {maxWidth:240}).addTo(obstacleLayerGroup);
-      // Иконка-метка в середине участка
       const mid = obs.points[Math.floor(obs.points.length/2)];
       const midIcon = L.divIcon({
         className:'',
-        html:`<div style="background:${color};color:#fff;border-radius:4px;padding:2px 6px;font-size:12px;border:1px solid #fff;box-shadow:0 1px 6px ${color}88;white-space:nowrap;cursor:pointer">${emoji}</div>`,
-        iconAnchor:[12,10]
+        html:`<div style="background:${color};color:#fff;border-radius:4px;padding:2px 8px;font-size:11px;border:1px solid #fff;box-shadow:0 1px 6px ${color}88;white-space:nowrap;cursor:pointer;font-family:'Golos Text',sans-serif">${emoji} ${name}</div>`,
+        iconAnchor:[0,10]
       });
       L.marker(mid, {icon:midIcon}).bindPopup(popup, {maxWidth:240}).addTo(obstacleLayerGroup);
     }
@@ -2005,6 +2030,8 @@ let routeLayer = null;
 let routeWaypoints = [];
 let waypointModeActive = false;
 let currentRouteOrderId = null;
+let routeFromCoords = null;
+let routeToCoords = null;
 
 function haversine(lat1,lon1,lat2,lon2){
   const R=6371000,r=Math.PI/180;
@@ -2028,8 +2055,10 @@ function clearRoute(){
   if(routeLayer){map.removeLayer(routeLayer);routeLayer=null;}
   routeWaypoints=[];currentRouteOrderId=null;waypointModeActive=false;
   if(map&&!obstacleModeActive)map.getContainer().style.cursor='';
+  routeFromCoords=null; routeToCoords=null;
   document.getElementById('route-panel').style.display='none';
   document.getElementById('route-dist-val').textContent='—';
+  document.getElementById('yandex-route-btn').style.display='none';
   const wpBtn=document.getElementById('waypoint-mode-btn');
   if(wpBtn){wpBtn.textContent='📍 Добавить объезд';wpBtn.style.color='#4a9eff';}
 }
@@ -2102,10 +2131,12 @@ async function buildRoute(orderId){
     if(!result) throw new Error('Маршрут не найден');
     const {lineCoords,distKm}=result;
 
+    routeFromCoords=f; routeToCoords=t;
     drawRouteOnMap(f,t,lineCoords);
     if(btn){btn.textContent='🗺 Перестроить маршрут';btn.disabled=false;}
     if(distEl){distEl.textContent=`📏 По дорогам: ${distKm} км`;distEl.style.display='block';}
     document.getElementById('route-dist-val').textContent=distKm+' км';
+    document.getElementById('yandex-route-btn').style.display='block';
     document.getElementById('route-panel').style.display='flex';
     document.getElementById('clear-wp-btn').style.display=routeWaypoints.length?'block':'none';
 
@@ -2121,6 +2152,13 @@ async function buildRoute(orderId){
     console.error(e);toast('❌ Ошибка: '+e.message);
     if(btn){btn.textContent='🗺 Построить маршрут';btn.disabled=false;}
   }
+}
+
+function openInYandex(){
+  if(!routeFromCoords||!routeToCoords) return;
+  const pts=[routeFromCoords,...routeWaypoints,routeToCoords];
+  const rtext=pts.map(p=>`${p[0]},${p[1]}`).join('~');
+  window.open(`https://yandex.ru/maps/?rtext=${rtext}&rtt=auto`,'_blank');
 }
 
 // ===================== ФОРМА ДОБАВЛЕНИЯ =====================

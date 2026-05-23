@@ -1776,6 +1776,8 @@ async function _renderMapAsync(){
           ${o.contact?`<div class="prow">📞 <strong>${o.contact}</strong></div>`:''}
           <div class="pp">${pNoVat?pNoVat.toLocaleString('ru')+'₽/т без НДС':'—'}${pVat?' / '+pVat.toLocaleString('ru')+'₽ с НДС':''}</div>
           <button id="fav-btn-${o.id}" onclick="toggleFavoriteFromMap(${o.id})" style="margin-top:6px;background:${o.favorite?'rgba(240,165,0,0.15)':'var(--bg3)'};color:${o.favorite?'var(--accent)':'var(--text2)'};border:1px solid ${o.favorite?'var(--border2)':'var(--border)'};font-size:11px;font-weight:600;padding:5px 10px;border-radius:var(--rs);cursor:pointer;width:100%;font-family:'Golos Text',sans-serif">${o.favorite?'⭐ В избранном':'☆ В избранное'}</button>
+          <button id="route-btn-${o.id}" onclick="buildRoute(${o.id})" style="margin-top:4px;background:rgba(74,158,255,0.15);color:#4a9eff;border:1px solid rgba(74,158,255,0.3);font-size:11px;font-weight:600;padding:5px 10px;border-radius:var(--rs);cursor:pointer;width:100%;font-family:'Golos Text',sans-serif">🗺 Построить маршрут</button>
+          <div id="route-dist-${o.id}" style="font-size:12px;color:var(--green);font-weight:600;text-align:center;margin-top:4px;display:none"></div>
           ${orders.length>1?`</div>`:``}
         `;
       }).join('')}
@@ -1957,6 +1959,81 @@ function renderObstaclesOnMap(){
 }
 
 document.getElementById('obstacle-modal').addEventListener('click', function(e){ if(e.target===this) closeObstacleForm(); });
+
+// ===================== МАРШРУТЫ =====================
+let routeLayer = null;
+
+async function buildRoute(orderId){
+  const o = orders.find(x => x.id === orderId);
+  if(!o) return;
+
+  const btn = document.getElementById('route-btn-' + orderId);
+  const distEl = document.getElementById('route-dist-' + orderId);
+  if(btn){ btn.textContent = '⏳ Строю маршрут...'; btn.disabled = true; }
+
+  // Геокодируем оба адреса (используем кеш если уже есть)
+  const [fromRes, toRes] = await Promise.all([
+    geocodeAddress(o.from),
+    geocodeAddress(o.to)
+  ]);
+
+  if(!fromRes || !toRes){
+    toast('❌ Не удалось определить ' + (!fromRes ? 'место погрузки' : 'место выгрузки'));
+    if(btn){ btn.textContent = '🗺 Построить маршрут'; btn.disabled = false; }
+    return;
+  }
+
+  try {
+    const f = fromRes.coords; // [lat, lon]
+    const t = toRes.coords;
+    const url = `https://router.project-osrm.org/route/v1/driving/${f[1]},${f[0]};${t[1]},${t[0]}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if(data.code !== 'Ok' || !data.routes || !data.routes.length){
+      toast('❌ Маршрут между этими точками не найден');
+      if(btn){ btn.textContent = '🗺 Построить маршрут'; btn.disabled = false; }
+      return;
+    }
+
+    const route = data.routes[0];
+    const distKm = Math.round(route.distance / 1000);
+    const lineCoords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+
+    // Убираем предыдущий маршрут
+    if(routeLayer) map.removeLayer(routeLayer);
+    routeLayer = L.layerGroup().addTo(map);
+
+    // Линия маршрута
+    L.polyline(lineCoords, {color:'#4a9eff', weight:5, opacity:0.85}).addTo(routeLayer);
+
+    // Маркеры начала и конца
+    const ptStyle = (col) => ({
+      className:'',
+      html:`<div style="width:12px;height:12px;border-radius:50%;background:${col};border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.5)"></div>`,
+      iconSize:[12,12], iconAnchor:[6,6]
+    });
+    L.marker(f, {icon: L.divIcon({...ptStyle('#3dba7a')})}).addTo(routeLayer);
+    L.marker(t, {icon: L.divIcon({...ptStyle('#e05050')})}).addTo(routeLayer);
+
+    // Вписываем карту под маршрут
+    map.fitBounds(L.polyline(lineCoords).getBounds(), {padding:[50,50]});
+
+    // Обновляем кнопку и показываем расстояние
+    if(btn){
+      btn.textContent = `🗺 Перестроить маршрут`;
+      btn.disabled = false;
+    }
+    if(distEl){
+      distEl.textContent = `📏 По дорогам: ${distKm} км`;
+      distEl.style.display = 'block';
+    }
+
+  } catch(e) {
+    toast('❌ Ошибка при построении маршрута');
+    if(btn){ btn.textContent = '🗺 Построить маршрут'; btn.disabled = false; }
+  }
+}
 
 // ===================== ФОРМА ДОБАВЛЕНИЯ =====================
 function openModal(){ document.getElementById('mdate').value=new Date().toISOString().split('T')[0]; document.getElementById('modal').classList.add('open'); }

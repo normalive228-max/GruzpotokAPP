@@ -622,18 +622,6 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
     <button class="bsec" style="width:100%;margin-top:8px;font-size:12px;padding:8px" onclick="clearGeocodeCache()">🗺 Сбросить кеш геокодирования</button>
     <div class="set-hint">Нажми если добавил Яндекс ключ, а адреса остались ненайденными — заставит попробовать снова.</div>
 
-    <div class="set-section" style="margin-top:18px">
-      <div class="set-title">🛣 Маршрутизация с объездом (OpenRouteService)</div>
-      <div class="set-row">
-        <label>ORS API Key</label>
-        <input id="cfg-ors" type="password" placeholder="eyJvcmciOiI...">
-      </div>
-      <div class="set-hint">Ключ необязателен — объезд препятствий работает и без него через Valhalla (бесплатно). ORS даёт приоритет если есть ключ: <strong>openrouteservice.org</strong> → Sign Up → скопируй токен (eyJ...).</div>
-      <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
-        <button class="bsec" style="flex:1;font-size:12px;padding:8px" onclick="testOrsKey()">Проверить ключ</button>
-        <div class="conn-status" id="ors-status"><div class="status-dot idle" id="ors-dot"></div><span id="ors-status-text">Не проверено</span></div>
-      </div>
-    </div>
   </div>
 </div>
 <div class="mo" id="obstacle-modal">
@@ -1344,7 +1332,6 @@ function openSettings() {
   document.getElementById('cfg-aikey').value = CFG.aiKey || '';
   document.getElementById('cfg-yandex').value = CFG.yandexKey || '';
   document.getElementById('cfg-boturl').value = CFG.botUrl || '';
-  document.getElementById('cfg-ors').value = CFG.orsKey || '';
   document.getElementById('settings-modal').classList.add('open');
 }
 function closeSettings() { document.getElementById('settings-modal').classList.remove('open'); }
@@ -1356,7 +1343,6 @@ function saveSettings() {
   CFG.aiKey = document.getElementById('cfg-aikey').value.trim();
   CFG.yandexKey = document.getElementById('cfg-yandex').value.trim();
   CFG.botUrl = document.getElementById('cfg-boturl').value.trim();
-  CFG.orsKey = document.getElementById('cfg-ors').value.trim();
   saveCfg();
   closeSettings();
   toast('✅ Настройки сохранены');
@@ -1419,23 +1405,6 @@ async function testYandexKey() {
       dot.className = 'status-dot err'; txt.textContent = 'Неверный ключ или домен не разрешён';
     }
   } catch(e) { dot.className = 'status-dot err'; txt.textContent = 'Ошибка: ' + e.message; }
-}
-
-async function testOrsKey(){
-  const key = document.getElementById('cfg-ors').value.trim();
-  const dot = document.getElementById('ors-dot');
-  const txt = document.getElementById('ors-status-text');
-  txt.textContent='Проверяю...'; dot.className='status-dot idle';
-  if(!key){ dot.className='status-dot err'; txt.textContent='Введи ключ'; return; }
-  try {
-    const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
-      method:'POST',
-      headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-      body: JSON.stringify({ coordinates:[[37.6173,55.7558],[30.3141,59.9386]] })
-    });
-    if(res.ok){ dot.className='status-dot ok'; txt.textContent='Ключ работает ✓'; }
-    else { const d=await res.json(); dot.className='status-dot err'; txt.textContent=d.error?.message||'Неверный ключ ('+res.status+')'; }
-  } catch(e){ dot.className='status-dot err'; txt.textContent='Ошибка: '+e.message; }
 }
 
 function resetOffset() {
@@ -2025,21 +1994,6 @@ function renderObstaclesOnMap(){
 document.getElementById('obstacle-modal').addEventListener('click', function(e){ if(e.target===this) closeObstacleForm(); });
 
 // ===================== МАРШРУТЫ =====================
-// Декодирование encoded polyline Valhalla (precision 6 = 1e-6)
-function decodePolyline6(encoded){
-  const res=[];let idx=0,lat=0,lng=0;
-  while(idx<encoded.length){
-    let b,shift=0,val=0;
-    do{b=encoded.charCodeAt(idx++)-63;val|=(b&0x1f)<<shift;shift+=5;}while(b>=32);
-    lat+=((val&1)?~(val>>1):(val>>1));
-    shift=0;val=0;
-    do{b=encoded.charCodeAt(idx++)-63;val|=(b&0x1f)<<shift;shift+=5;}while(b>=32);
-    lng+=((val&1)?~(val>>1):(val>>1));
-    res.push([lat/1e6,lng/1e6]);
-  }
-  return res;
-}
-
 let routeLayer = null;
 let routeWaypoints = [];
 let waypointModeActive = false;
@@ -2049,35 +2003,6 @@ function haversine(lat1,lon1,lat2,lon2){
   const R=6371000,r=Math.PI/180;
   const a=Math.sin((lat2-lat1)*r/2)**2+Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin((lon2-lon1)*r/2)**2;
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-}
-
-// Создаём круговой полигон вокруг точки (GeoJSON: [lon,lat])
-function circlePolygon(lat,lon,radiusM,n=16){
-  const R=6371000,r=Math.PI/180;
-  const pts=[];
-  for(let i=0;i<=n;i++){
-    const a=(2*Math.PI*i)/n;
-    pts.push([lon+(radiusM/R/Math.cos(lat*r))/r*Math.sin(a), lat+(radiusM/R)/r*Math.cos(a)]);
-  }
-  return pts;
-}
-
-// Строим список avoid-полигонов из всех препятствий
-function buildAvoidPolygons(){
-  const rings=[];
-  for(const obs of obstacles){
-    if(obs.drawType==='point'&&obs.coords){
-      rings.push(circlePolygon(obs.coords[0],obs.coords[1],500)); // 500м — перекрывает мост/участок дороги
-    } else if(obs.drawType==='segment'&&obs.points){
-      // Кружок на каждой точке + на серединах отрезков
-      for(const pt of obs.points) rings.push(circlePolygon(pt[0],pt[1],300));
-      for(let i=0;i<obs.points.length-1;i++){
-        const mid=[(obs.points[i][0]+obs.points[i+1][0])/2,(obs.points[i][1]+obs.points[i+1][1])/2];
-        rings.push(circlePolygon(mid[0],mid[1],300));
-      }
-    }
-  }
-  return rings;
 }
 
 function checkRouteObstacles(routeCoords){
@@ -2135,126 +2060,6 @@ async function fetchOSRMRoute(pts){
   return{lineCoords:data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),distKm:Math.round(data.routes[0].distance/1000)};
 }
 
-// Декодер Polyline (precision 5) — формат геометрии Яндекс Маршрутизатора
-function decodePolyline5(enc){
-  const r=[];let i=0,lat=0,lng=0;
-  while(i<enc.length){
-    let b,s=0,v=0;
-    do{b=enc.charCodeAt(i++)-63;v|=(b&0x1f)<<s;s+=5;}while(b>=32);
-    lat+=((v&1)?~(v>>1):(v>>1));
-    s=0;v=0;
-    do{b=enc.charCodeAt(i++)-63;v|=(b&0x1f)<<s;s+=5;}while(b>=32);
-    lng+=((v&1)?~(v>>1):(v>>1));
-    r.push([lat/1e5,lng/1e5]);
-  }
-  return r;
-}
-
-// Запрос маршрута через Яндекс «Матрица Расстояний и Построение Маршрута»
-async function fetchYandexRoute(pts){
-  const key=CFG.yandexKey;
-  if(!key) return null;
-  try{
-    // waypoints: lon,lat через | (Яндекс использует lon,lat)
-    const wps=pts.map(c=>`${c[1].toFixed(6)},${c[0].toFixed(6)}`).join('|');
-    const url=`https://api.routing.yandex.net/v2/route?apikey=${key}&waypoints=${encodeURIComponent(wps)}&mode=driving&lang=ru_RU`;
-    const res=await fetch(url,{referrerPolicy:'unsafe-url',referrer:'https://normalive228-max.github.io/'});
-    if(!res.ok){const e=await res.json().catch(()=>({}));console.warn('Яндекс роут:',res.status,e);return null;}
-    const data=await res.json();
-    if(!data.route) return null;
-    const r=data.route;
-    const distKm=Math.round((r.distance?.value||0)/1000);
-    let coords=[];
-    // Парсим геометрию: polyline по шагам или GeoJSON
-    for(const leg of r.legs||[]){
-      for(const step of leg.steps||[]){
-        if(step.polyline?.points) coords.push(...decodePolyline5(step.polyline.points));
-        else if(step.geometry?.type==='LineString') coords.push(...step.geometry.coordinates.map(c=>[c[1],c[0]]));
-      }
-      // Некоторые версии API дают геометрию на уровне leg
-      if(!leg.steps?.length && leg.geometry?.type==='LineString') coords.push(...leg.geometry.coordinates.map(c=>[c[1],c[0]]));
-    }
-    // Если геометрия сразу на уровне route
-    if(!coords.length && r.geometry?.type==='LineString') coords=r.geometry.coordinates.map(c=>[c[1],c[0]]);
-    if(coords.length<2){console.warn('Яндекс: геометрия пустая',data);return null;}
-    return{lineCoords:coords,distKm,engine:'Яндекс'};
-  }catch(e){console.warn('Яндекс маршрутизатор:',e);return null;}
-}
-
-// Универсальный запрос: Яндекс → OSRM
-async function fetchRoute(pts){
-  const y=await fetchYandexRoute(pts);
-  if(y) return y;
-  const o=await fetchOSRMRoute(pts);
-  return o?{...o,engine:'OSRM'}:null;
-}
-
-// Роутер + автообъезд препятствий
-async function buildOSRMDetour(f,t){
-  const base=await fetchRoute([f,...routeWaypoints,t]);
-  if(!base) throw new Error('Маршрут не найден');
-  if(!obstacles.length) return{...base,autoDetoured:false};
-
-  const THRESHOLD=400; // м — считаем препятствие «на маршруте»
-
-  // Ищем препятствия близко к маршруту
-  const hits=[];
-  for(const obs of obstacles){
-    const obsPts=obs.drawType==='point'?[obs.coords]:obs.points;
-    let minDist=Infinity,bestIdx=-1,bestPt=null;
-    for(const oc of obsPts){
-      for(let i=1;i<base.lineCoords.length-1;i++){
-        const d=haversine(base.lineCoords[i][0],base.lineCoords[i][1],oc[0],oc[1]);
-        if(d<minDist){minDist=d;bestIdx=i;bestPt=oc;}
-      }
-    }
-    if(minDist<THRESHOLD&&bestIdx>0) hits.push({idx:bestIdx,pt:bestPt});
-  }
-  if(!hits.length) return{...base,autoDetoured:false};
-  hits.sort((a,b)=>a.idx-b.idx);
-
-  // Идём вдоль маршрута на distM метров от fromIdx
-  const walkRoute=(fromIdx,distM,fwd)=>{
-    let acc=0,idx=fromIdx;
-    while(fwd?idx<base.lineCoords.length-1:idx>0){
-      const ni=idx+(fwd?1:-1);
-      acc+=haversine(base.lineCoords[idx][0],base.lineCoords[idx][1],base.lineCoords[ni][0],base.lineCoords[ni][1]);
-      idx=ni; if(acc>=distM) break;
-    }
-    return idx;
-  };
-
-  // Перпендикуляр к маршруту в точке idx, отступ perpM метров в сторону side
-  const perpAt=(idx,perpM,side)=>{
-    const p0=base.lineCoords[Math.max(0,idx-3)];
-    const p1=base.lineCoords[Math.min(base.lineCoords.length-1,idx+3)];
-    const pt=base.lineCoords[idx];
-    const cosLat=Math.cos(pt[0]*Math.PI/180);
-    const mLat=p1[0]-p0[0],mLon=(p1[1]-p0[1])*cosLat;
-    const len=Math.sqrt(mLat*mLat+mLon*mLon)||1;
-    const dp=perpM/111000;
-    return[pt[0]+(-mLon/len)*dp*side, pt[1]+(mLat/len)*dp/cosLat*side];
-  };
-
-  // Ключевая идея: ставим waypoints ДО и ПОСЛЕ препятствия (4 км вдоль маршрута),
-  // смещённые в сторону — OSRM вынужден обогнуть заранее
-  for(const side of[1,-1]){
-    for(const perpM of[2000,5000,10000]){
-      try{
-        const wps=[];
-        for(const h of hits){
-          wps.push(perpAt(walkRoute(h.idx,4000,false),perpM,side)); // 4 км до
-          wps.push(perpAt(walkRoute(h.idx,4000,true), perpM,side)); // 4 км после
-        }
-        const route=await fetchRoute([f,...wps,...routeWaypoints,t]);
-        if(!route) continue;
-        if(!checkRouteObstacles(route.lineCoords).length) return{...route,autoDetoured:true};
-      }catch(e){}
-    }
-  }
-  return{...base,autoDetoured:false};
-}
-
 function drawRouteOnMap(f,t,lineCoords){
   if(routeLayer)map.removeLayer(routeLayer);
   routeLayer=L.layerGroup().addTo(map);
@@ -2284,13 +2089,10 @@ async function buildRoute(orderId){
 
   try{
     const f=fromRes.coords, t=toRes.coords;
-    let distKm, lineCoords, autoDetoured=false;
-
-    // OSRM с умным объездом препятствий через перпендикулярные waypoints
-    const result=await buildOSRMDetour(f,t);
-    lineCoords=result.lineCoords;
-    distKm=result.distKm;
-    autoDetoured=result.autoDetoured;
+    const allPts=[f,...routeWaypoints,t];
+    const result=await fetchOSRMRoute(allPts);
+    if(!result) throw new Error('Маршрут не найден');
+    const {lineCoords,distKm}=result;
 
     drawRouteOnMap(f,t,lineCoords);
     if(btn){btn.textContent='🗺 Перестроить маршрут';btn.disabled=false;}
@@ -2299,16 +2101,12 @@ async function buildRoute(orderId){
     document.getElementById('clear-wp-btn').style.display=routeWaypoints.length?'block':'none';
 
     const warnEl=document.getElementById('route-obs-warn');
-    if(autoDetoured){
-      const eng=result.engine||'OSRM';
-      warnEl.innerHTML=`✅ Маршрут объезжает препятствия <span style="opacity:.75;font-size:10px">(${eng})</span>`;
-      warnEl.style.background='rgba(61,186,122,0.88)';warnEl.style.display='block';
+    const warns=checkRouteObstacles(lineCoords);
+    if(warns.length){
+      warnEl.innerHTML='⚠️ На маршруте есть препятствия:<br>'+warns.map(w=>`• ${w}`).join('<br>')+'<br><span style="opacity:.8;font-size:10px">Нажми «Добавить объезд» чтобы проложить вручную</span>';
+      warnEl.style.background='rgba(200,50,50,0.92)';warnEl.style.display='block';
     } else {
-      const warns=checkRouteObstacles(lineCoords);
-      if(warns.length){
-        warnEl.innerHTML='⚠️ Маршрут проходит через:<br>'+warns.map(w=>`• ${w}`).join('<br>')+'<br><span style="opacity:.8;font-size:10px">Нет объездного пути через другие дороги</span>';
-        warnEl.style.background='rgba(200,50,50,0.92)';warnEl.style.display='block';
-      } else { warnEl.style.display='none'; }
+      warnEl.style.display='none';
     }
   }catch(e){
     console.error(e);toast('❌ Ошибка: '+e.message);

@@ -2103,6 +2103,66 @@ function addWaypoint(latlng){
 function removeWaypoint(idx){routeWaypoints.splice(idx,1);if(currentRouteOrderId)buildRoute(currentRouteOrderId);}
 function clearWaypoints(){routeWaypoints=[];document.getElementById('clear-wp-btn').style.display='none';if(currentRouteOrderId)buildRoute(currentRouteOrderId);}
 
+// Запрос маршрута через OSRM
+async function fetchOSRMRoute(pts){
+  const coordStr=pts.map(c=>`${c[1]},${c[0]}`).join(';');
+  const res=await fetch(`https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`);
+  const data=await res.json();
+  if(data.code!=='Ok'||!data.routes?.length) return null;
+  return{lineCoords:data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),distKm:Math.round(data.routes[0].distance/1000)};
+}
+
+// OSRM + автообъезд: находим препятствия → добавляем перпендикулярные waypoints → перестраиваем
+async function buildOSRMDetour(f,t){
+  const base=await fetchOSRMRoute([f,...routeWaypoints,t]);
+  if(!base) throw new Error('Маршрут не найден');
+  if(!obstacles.length) return{...base,autoDetoured:false};
+
+  const THRESHOLD=350; // м — считаем препятствие «на маршруте»
+  const DETOUR_M=1500; // м — насколько отступаем в сторону
+
+  // Ищем препятствия близко к маршруту
+  const hits=[];
+  for(const obs of obstacles){
+    const obsPts=obs.drawType==='point'?[obs.coords]:obs.points;
+    let minDist=Infinity,bestIdx=-1,bestPt=null;
+    for(const oc of obsPts){
+      for(let i=1;i<base.lineCoords.length-1;i++){
+        const d=haversine(base.lineCoords[i][0],base.lineCoords[i][1],oc[0],oc[1]);
+        if(d<minDist){minDist=d;bestIdx=i;bestPt=oc;}
+      }
+    }
+    if(minDist<THRESHOLD&&bestIdx>0) hits.push({idx:bestIdx,pt:bestPt});
+  }
+
+  if(!hits.length) return{...base,autoDetoured:false};
+  hits.sort((a,b)=>a.idx-b.idx);
+
+  // Вычисляем точки объезда перпендикулярно маршруту
+  const makeWps=(side)=>hits.map(h=>{
+    const i=h.idx;
+    const p0=base.lineCoords[Math.max(0,i-5)];
+    const p1=base.lineCoords[Math.min(base.lineCoords.length-1,i+5)];
+    const cosLat=Math.cos(h.pt[0]*Math.PI/180);
+    const mLat=p1[0]-p0[0];
+    const mLon=(p1[1]-p0[1])*cosLat;
+    const len=Math.sqrt(mLat*mLat+mLon*mLon)||1;
+    const scale=DETOUR_M/111000;
+    return[h.pt[0]+(-mLon/len)*scale*side, h.pt[1]+(mLat/len)*scale/cosLat*side];
+  });
+
+  // Пробуем оба направления (влево/вправо от маршрута)
+  for(const side of[1,-1]){
+    try{
+      const wps=makeWps(side);
+      const route=await fetchOSRMRoute([f,...wps,...routeWaypoints,t]);
+      if(!route) continue;
+      if(!checkRouteObstacles(route.lineCoords).length) return{...route,autoDetoured:true};
+    }catch(e){}
+  }
+  return{...base,autoDetoured:false}; // объезд не нашёл альтернативы
+}
+
 function drawRouteOnMap(f,t,lineCoords){
   if(routeLayer)map.removeLayer(routeLayer);
   routeLayer=L.layerGroup().addTo(map);
@@ -2132,62 +2192,13 @@ async function buildRoute(orderId){
 
   try{
     const f=fromRes.coords, t=toRes.coords;
-    const orsKey=CFG.orsKey;
-    const avoidRings=obstacles.length?buildAvoidPolygons():[];
-    let distKm, lineCoords, routeEngine='OSRM';
-    const allPts=[f,...routeWaypoints,t];
+    let distKm, lineCoords, autoDetoured=false;
 
-    // 1. ORS (если есть ключ и есть препятствия)
-    if(orsKey && avoidRings.length){
-      try{
-        const body={
-          coordinates:allPts.map(c=>[c[1],c[0]]),
-          options:{avoid_polygons:{type:'MultiPolygon',coordinates:avoidRings.map(r=>[r])}}
-        };
-        const res=await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson',{
-          method:'POST',
-          headers:{'Authorization':'Bearer '+orsKey,'Content-Type':'application/json'},
-          body:JSON.stringify(body)
-        });
-        if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'ORS '+res.status);}
-        const data=await res.json();
-        const feat=data.features[0];
-        distKm=Math.round(feat.properties.summary.distance/1000);
-        lineCoords=feat.geometry.coordinates.map(c=>[c[1],c[0]]);
-        routeEngine='ORS';
-      }catch(orsErr){ console.warn('ORS failed:',orsErr); }
-    }
-
-    // 2. Valhalla — бесплатно, без ключа, поддерживает exclude_polygons
-    if(!lineCoords && avoidRings.length){
-      try{
-        const locations=allPts.map(c=>({lat:c[0],lon:c[1],type:'break'}));
-        // avoidRings уже в формате [[lon,lat],...] — именно то, что нужно Valhalla
-        const body={locations,costing:'auto',directions_options:{units:'km'},exclude_polygons:avoidRings};
-        const res=await fetch('https://valhalla1.openstreetmap.de/route',{
-          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
-        });
-        if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error('Valhalla '+(e.error||res.status));}
-        const data=await res.json();
-        if(!data.trip?.legs?.length) throw new Error('Valhalla: нет маршрута');
-        lineCoords=data.trip.legs.flatMap(l=>decodePolyline6(l.shape));
-        distKm=Math.round(data.trip.summary.length);
-        routeEngine='Valhalla';
-      }catch(vErr){
-        console.warn('Valhalla failed:',vErr);
-        toast('⚠️ Сервер объезда недоступен, строю без объезда...');
-      }
-    }
-
-    // 3. OSRM — запасной вариант, всегда работает
-    if(!lineCoords){
-      const coordStr=allPts.map(c=>`${c[1]},${c[0]}`).join(';');
-      const res=await fetch(`https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`);
-      const data=await res.json();
-      if(data.code!=='Ok'||!data.routes?.length)throw new Error('Маршрут не найден');
-      distKm=Math.round(data.routes[0].distance/1000);
-      lineCoords=data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
-    }
+    // OSRM с умным объездом препятствий через перпендикулярные waypoints
+    const result=await buildOSRMDetour(f,t);
+    lineCoords=result.lineCoords;
+    distKm=result.distKm;
+    autoDetoured=result.autoDetoured;
 
     drawRouteOnMap(f,t,lineCoords);
     if(btn){btn.textContent='🗺 Перестроить маршрут';btn.disabled=false;}
@@ -2196,16 +2207,16 @@ async function buildRoute(orderId){
     document.getElementById('clear-wp-btn').style.display=routeWaypoints.length?'block':'none';
 
     const warnEl=document.getElementById('route-obs-warn');
-    if(routeEngine!=='OSRM' && obstacles.length){
-      warnEl.innerHTML=`✅ Маршрут объезжает препятствия <span style="opacity:.75;font-size:10px">(${routeEngine})</span>`;
+    if(autoDetoured){
+      warnEl.innerHTML='✅ Маршрут объезжает препятствия';
       warnEl.style.background='rgba(61,186,122,0.88)';warnEl.style.display='block';
-    } else if(routeEngine==='OSRM'){
+    } else {
       const warns=checkRouteObstacles(lineCoords);
       if(warns.length){
-        warnEl.innerHTML='⚠️ Маршрут проходит через:<br>'+warns.map(w=>`• ${w}`).join('<br>');
+        warnEl.innerHTML='⚠️ Маршрут проходит через:<br>'+warns.map(w=>`• ${w}`).join('<br>')+'<br><span style="opacity:.8;font-size:10px">Нет объездного пути через другие дороги</span>';
         warnEl.style.background='rgba(200,50,50,0.92)';warnEl.style.display='block';
       } else { warnEl.style.display='none'; }
-    } else { warnEl.style.display='none'; }
+    }
   }catch(e){
     console.error(e);toast('❌ Ошибка: '+e.message);
     if(btn){btn.textContent='🗺 Построить маршрут';btn.disabled=false;}

@@ -626,7 +626,7 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
         <label>ORS API Key</label>
         <input id="cfg-ors" type="password" placeholder="eyJvcmciOiI...">
       </div>
-      <div class="set-hint">Бесплатный ключ: <strong>openrouteservice.org</strong> → Sign Up → скопируй токен. 2 000 запросов/день бесплатно. С ключом маршрут строится автоматически в объезд всех твоих препятствий на карте.</div>
+      <div class="set-hint">Ключ необязателен — объезд препятствий работает и без него через Valhalla (бесплатно). ORS даёт приоритет если есть ключ: <strong>openrouteservice.org</strong> → Sign Up → скопируй токен (eyJ...).</div>
       <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
         <button class="bsec" style="flex:1;font-size:12px;padding:8px" onclick="testOrsKey()">Проверить ключ</button>
         <div class="conn-status" id="ors-status"><div class="status-dot idle" id="ors-dot"></div><span id="ors-status-text">Не проверено</span></div>
@@ -2002,6 +2002,21 @@ function renderObstaclesOnMap(){
 document.getElementById('obstacle-modal').addEventListener('click', function(e){ if(e.target===this) closeObstacleForm(); });
 
 // ===================== МАРШРУТЫ =====================
+// Декодирование encoded polyline Valhalla (precision 6 = 1e-6)
+function decodePolyline6(encoded){
+  const res=[];let idx=0,lat=0,lng=0;
+  while(idx<encoded.length){
+    let b,shift=0,val=0;
+    do{b=encoded.charCodeAt(idx++)-63;val|=(b&0x1f)<<shift;shift+=5;}while(b>=32);
+    lat+=((val&1)?~(val>>1):(val>>1));
+    shift=0;val=0;
+    do{b=encoded.charCodeAt(idx++)-63;val|=(b&0x1f)<<shift;shift+=5;}while(b>=32);
+    lng+=((val&1)?~(val>>1):(val>>1));
+    res.push([lat/1e6,lng/1e6]);
+  }
+  return res;
+}
+
 let routeLayer = null;
 let routeWaypoints = [];
 let waypointModeActive = false;
@@ -2119,12 +2134,12 @@ async function buildRoute(orderId){
     const f=fromRes.coords, t=toRes.coords;
     const orsKey=CFG.orsKey;
     const avoidRings=obstacles.length?buildAvoidPolygons():[];
-    let distKm, lineCoords, usedORS=false;
+    let distKm, lineCoords, routeEngine='OSRM';
+    const allPts=[f,...routeWaypoints,t];
 
+    // 1. ORS (если есть ключ и есть препятствия)
     if(orsKey && avoidRings.length){
-      // ORS с автообъездом препятствий
       try{
-        const allPts=[f,...routeWaypoints,t];
         const body={
           coordinates:allPts.map(c=>[c[1],c[0]]),
           options:{avoid_polygons:{type:'MultiPolygon',coordinates:avoidRings.map(r=>[r])}}
@@ -2139,16 +2154,31 @@ async function buildRoute(orderId){
         const feat=data.features[0];
         distKm=Math.round(feat.properties.summary.distance/1000);
         lineCoords=feat.geometry.coordinates.map(c=>[c[1],c[0]]);
-        usedORS=true;
-      }catch(orsErr){
-        console.warn('ORS failed, fallback OSRM:',orsErr);
-        toast('⚠️ ORS недоступен, строю через OSRM без объезда');
-      }
+        routeEngine='ORS';
+      }catch(orsErr){ console.warn('ORS failed:',orsErr); }
     }
 
+    // 2. Valhalla — бесплатно, без ключа, поддерживает exclude_polygons
+    if(!lineCoords && avoidRings.length){
+      try{
+        const locations=allPts.map(c=>({lat:c[0],lon:c[1],type:'break'}));
+        // конвертируем [lon,lat][] → [{lat,lon}][]
+        const excl=avoidRings.map(ring=>ring.map(pt=>({lat:pt[1],lon:pt[0]})));
+        const body={locations,costing:'auto',directions_options:{units:'km'},exclude_polygons:excl};
+        const res=await fetch('https://valhalla1.openstreetmap.de/route',{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+        });
+        if(!res.ok){const e=await res.json();throw new Error('Valhalla '+(e.error||res.status));}
+        const data=await res.json();
+        if(!data.trip?.legs?.length) throw new Error('Valhalla: нет маршрута');
+        lineCoords=data.trip.legs.flatMap(l=>decodePolyline6(l.shape));
+        distKm=Math.round(data.trip.summary.length);
+        routeEngine='Valhalla';
+      }catch(vErr){ console.warn('Valhalla failed:',vErr); }
+    }
+
+    // 3. OSRM — запасной вариант, всегда работает
     if(!lineCoords){
-      // OSRM — без автообъезда
-      const allPts=[f,...routeWaypoints,t];
       const coordStr=allPts.map(c=>`${c[1]},${c[0]}`).join(';');
       const res=await fetch(`https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson`);
       const data=await res.json();
@@ -2163,20 +2193,17 @@ async function buildRoute(orderId){
     document.getElementById('route-panel').style.display='flex';
     document.getElementById('clear-wp-btn').style.display=routeWaypoints.length?'block':'none';
 
-    // Статус на панели
     const warnEl=document.getElementById('route-obs-warn');
-    if(usedORS && obstacles.length){
-      warnEl.innerHTML=`✅ Маршрут объезжает ${obstacles.length} препятствий`;
+    if(routeEngine!=='OSRM' && obstacles.length){
+      warnEl.innerHTML=`✅ Маршрут объезжает препятствия`;
       warnEl.style.background='rgba(61,186,122,0.88)';warnEl.style.display='block';
-    } else {
+    } else if(routeEngine==='OSRM'){
       const warns=checkRouteObstacles(lineCoords);
       if(warns.length){
-        warnEl.innerHTML='⚠️ Маршрут проходит через:<br>'+warns.map(w=>`• ${w}`).join('<br>')+(orsKey?'':'\n<span style="opacity:.8;font-size:10px">Добавь ORS-ключ в ⚙️ для автообъезда</span>');
+        warnEl.innerHTML='⚠️ Маршрут проходит через:<br>'+warns.map(w=>`• ${w}`).join('<br>');
         warnEl.style.background='rgba(200,50,50,0.92)';warnEl.style.display='block';
-      } else {
-        warnEl.style.display='none';
-      }
-    }
+      } else { warnEl.style.display='none'; }
+    } else { warnEl.style.display='none'; }
   }catch(e){
     console.error(e);toast('❌ Ошибка: '+e.message);
     if(btn){btn.textContent='🗺 Построить маршрут';btn.disabled=false;}

@@ -624,7 +624,7 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
       <div class="set-title">🛣 Маршрутизация с объездом (OpenRouteService)</div>
       <div class="set-row">
         <label>ORS API Key</label>
-        <input id="cfg-ors" type="password" placeholder="5b3ce3597851110...">
+        <input id="cfg-ors" type="password" placeholder="eyJvcmciOiI...">
       </div>
       <div class="set-hint">Бесплатный ключ: <strong>openrouteservice.org</strong> → Sign Up → скопируй токен. 2 000 запросов/день бесплатно. С ключом маршрут строится автоматически в объезд всех твоих препятствий на карте.</div>
       <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
@@ -1405,9 +1405,13 @@ async function testOrsKey(){
   txt.textContent='Проверяю...'; dot.className='status-dot idle';
   if(!key){ dot.className='status-dot err'; txt.textContent='Введи ключ'; return; }
   try {
-    const res = await fetch(`https://api.openrouteservice.org/v2/directions/driving-hgv?api_key=${key}&start=37.6173,55.7558&end=30.3141,59.9386`);
+    const res = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+      body: JSON.stringify({ coordinates:[[37.6173,55.7558],[30.3141,59.9386]] })
+    });
     if(res.ok){ dot.className='status-dot ok'; txt.textContent='Ключ работает ✓'; }
-    else { const d=await res.json(); dot.className='status-dot err'; txt.textContent=d.error?.message||'Неверный ключ'; }
+    else { const d=await res.json(); dot.className='status-dot err'; txt.textContent=d.error?.message||'Неверный ключ ('+res.status+')'; }
   } catch(e){ dot.className='status-dot err'; txt.textContent='Ошибка: '+e.message; }
 }
 
@@ -2125,9 +2129,9 @@ async function buildRoute(orderId){
           coordinates:allPts.map(c=>[c[1],c[0]]),
           options:{avoid_polygons:{type:'MultiPolygon',coordinates:avoidRings.map(r=>[r])}}
         };
-        const res=await fetch('https://api.openrouteservice.org/v2/directions/driving-hgv/geojson',{
+        const res=await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson',{
           method:'POST',
-          headers:{'Authorization':orsKey,'Content-Type':'application/json'},
+          headers:{'Authorization':'Bearer '+orsKey,'Content-Type':'application/json'},
           body:JSON.stringify(body)
         });
         if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'ORS '+res.status);}

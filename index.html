@@ -673,7 +673,13 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
 
 <script>
 // ===================== КОНФИГ =====================
-let CFG = JSON.parse(localStorage.getItem('gp_cfg') || '{}');
+const _CFG_DEFAULTS = {
+  tgToken:  '7920518387:AAF3drnahtmC0A8GMuKP3ra-6IgNybGi9IE',
+  tgChatId: '-1001542166589',
+  botUrl:   'https://gruzpotok-agent-production.up.railway.app',
+  yandexKey:'124d1c93-025e-41f6-8da6-d36ce0d1f866'
+};
+let CFG = Object.assign({}, _CFG_DEFAULTS, JSON.parse(localStorage.getItem('gp_cfg') || '{}'));
 function saveCfg(){ localStorage.setItem('gp_cfg', JSON.stringify(CFG)); }
 
 // ===================== ГЕОКОДЕР =====================

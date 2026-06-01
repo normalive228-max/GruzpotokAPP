@@ -1216,7 +1216,9 @@ async function syncOrders() {
       console.log('[sync] bot response:', data);
       if (data.ok && data.orders && data.orders.length > 0) {
         let added = 0, skippedDate = 0, skippedDup = 0;
-        const existingIds = new Set(orders.map(o => o.botOrderId).filter(Boolean));
+        // При фильтре по дате не считаем удалённые заявки дублями — они восстановятся
+        const filterByDate = !_syncNoFilter && (_syncDateFrom || _syncDateTo);
+        const existingIds = new Set(orders.filter(o => filterByDate ? !o.trashed : true).map(o => o.botOrderId).filter(Boolean));
         for (const apiOrder of data.orders) {
           if (existingIds.has(apiOrder.id)) { skippedDup++; continue; }
           const order = {

@@ -1216,11 +1216,18 @@ async function syncOrders() {
       console.log('[sync] bot response:', data);
       if (data.ok && data.orders && data.orders.length > 0) {
         let added = 0, skippedDate = 0, skippedDup = 0;
-        // При фильтре по дате не считаем удалённые заявки дублями — они восстановятся
-        const filterByDate = !_syncNoFilter && (_syncDateFrom || _syncDateTo);
-        const existingIds = new Set(orders.filter(o => filterByDate ? !o.trashed : true).map(o => o.botOrderId).filter(Boolean));
+        const existingIds = new Set(orders.filter(o => !o.trashed).map(o => o.botOrderId).filter(Boolean));
+        const trashedIds = new Map(orders.filter(o => o.trashed && o.botOrderId).map(o => [o.botOrderId, o]));
         for (const apiOrder of data.orders) {
           if (existingIds.has(apiOrder.id)) { skippedDup++; continue; }
+          // Если заявка в корзине — восстанавливаем её
+          if (trashedIds.has(apiOrder.id)) {
+            const existing = trashedIds.get(apiOrder.id);
+            if (!orderMatchesDates(existing)) { skippedDate++; continue; }
+            existing.trashed = false; delete existing.trashedAt;
+            added++;
+            continue;
+          }
           const order = {
             id: Date.now() + Math.random(),
             botOrderId: apiOrder.id,
@@ -1697,6 +1704,15 @@ function permanentDelete(id){
   toast('Заявка удалена навсегда');
 }
 
+function emptyTrash(){
+  const trashed = orders.filter(o=>o.trashed);
+  if(!trashed.length){ toast('Корзина уже пуста'); return; }
+  if(!confirm(`Удалить навсегда ${trashed.length} заявок из корзины?`)) return;
+  orders = orders.filter(o=>!o.trashed);
+  save(); renderTrash(); updateTrashBadge();
+  toast(`🗑 Удалено ${trashed.length} заявок`);
+}
+
 function deleteAllExceptFavorites(){
   const toTrash = orders.filter(o=>!o.favorite&&!o.trashed);
   if(!toTrash.length){ toast('Нет заявок для удаления'); return; }
@@ -1715,7 +1731,9 @@ function renderTrash(){
     el.innerHTML = '<div class="empty"><div class="ei">🗑</div><p>Корзина пуста.<br>Восстановленные заявки<br>вернутся в раздел «Заявки».</p></div>';
     return;
   }
-  el.innerHTML = trashed.map(o=>{
+  el.innerHTML = `<div style="padding:8px 2px 4px;display:flex;justify-content:flex-end">
+    <button onclick="emptyTrash()" style="background:rgba(224,80,80,0.12);color:var(--red);border:1px solid rgba(224,80,80,0.25);font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--rs);cursor:pointer;font-family:'Golos Text',sans-serif">🗑 Очистить корзину</button>
+  </div>` + trashed.map(o=>{
     const pNoVat = o.priceNoVat||o.price;
     const priceStr = pNoVat?`${pNoVat.toLocaleString('ru')}₽/т без НДС`:'—';
     return `

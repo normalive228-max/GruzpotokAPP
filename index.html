@@ -1218,6 +1218,9 @@ async function syncOrders() {
         let added = 0, skippedDate = 0, skippedDup = 0;
         const existingIds = new Set(orders.filter(o => !o.trashed).map(o => o.botOrderId).filter(Boolean));
         const trashedIds = new Map(orders.filter(o => o.trashed && o.botOrderId).map(o => [o.botOrderId, o]));
+        // Дедупликация по содержимому (защита от дублей с разными ID на стороне бота)
+        const contentKeys = new Set(orders.filter(o => !o.trashed).map(o => `${o.from}|${o.to}|${o.cargo}|${o.priceNoVat}`));
+        const cleanAddr = v => (v && v !== 'null' && v !== 'undefined') ? v.split(',').map(s=>s.trim()).filter(s=>s&&s!=='null'&&s!=='undefined').join(', ') : '';
         for (const apiOrder of data.orders) {
           if (existingIds.has(apiOrder.id)) { skippedDup++; continue; }
           // Если заявка в корзине — восстанавливаем её
@@ -1228,15 +1231,21 @@ async function syncOrders() {
             added++;
             continue;
           }
+          const fromClean = cleanAddr(apiOrder.from);
+          const toClean   = cleanAddr(apiOrder.to);
+          const cargoClean = [apiOrder.cargo, apiOrder.cargoType].filter(v=>v&&v!=='null').join(' ');
+          const contentKey = `${fromClean}|${toClean}|${cargoClean}|${apiOrder.price_no_vat}`;
+          if (contentKeys.has(contentKey)) { skippedDup++; continue; }
+          contentKeys.add(contentKey);
           const order = {
             id: Date.now() + Math.random(),
             botOrderId: apiOrder.id,
-            cargo: [apiOrder.cargo, apiOrder.cargoType].filter(Boolean).join(' '),
+            cargo: cargoClean,
             weight: apiOrder.weight,
-            from: apiOrder.from || '',
-            fromShort: (apiOrder.from || '').split(',')[0].trim(),
-            to: apiOrder.to || '',
-            toShort: (apiOrder.to || '').split(',')[0].trim(),
+            from: fromClean,
+            fromShort: fromClean.split(',')[0].trim(),
+            to: toClean,
+            toShort: toClean.split(',')[0].trim(),
             distance: apiOrder.distance,
             priceNoVat: apiOrder.price_no_vat,
             priceVat: apiOrder.price_vat,

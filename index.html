@@ -1217,13 +1217,6 @@ async function syncOrders() {
       })
       .map(u => ({ text: u.message.text, updateId: u.update_id, msgId: u.message.message_id }));
 
-    // Подтверждаем получение только тех что реально обработали
-    if (updates.length > 0) {
-      const lastId = updates[updates.length - 1].update_id;
-      // Сдвигаем offset чтобы не получать одно и то же
-      await fetch(`https://api.telegram.org/bot${token}/getUpdates?offset=${lastId + 1}&limit=1`);
-      // НЕ сохраняем lastUpdateId — при следующем запуске получим свежие сообщения
-    }
 
     if (newMessages.length === 0) {
       toast('Нет новых сообщений. Напиши заявку в группу и попробуй снова.');

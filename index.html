@@ -509,6 +509,12 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
         <span>Определяю координаты...</span>
       </div>
       <div id="map"></div>
+      <div class="map-legend">
+        <div><span class="dot" style="background:#4a9eff"></span> АИСТ</div>
+        <div><span class="dot" style="background:#f0a500"></span> Telegram</div>
+        <div><span class="dot" style="background:#9b6dff"></span> Вручную</div>
+        <div><span class="dot" style="background:var(--bg3);border-color:#e05050"></span> Срочная</div>
+      </div>
       <div id="route-panel" style="position:absolute;bottom:20px;right:10px;z-index:1001;display:none;flex-direction:column;gap:6px;align-items:flex-end;max-width:260px">
         <div id="route-dist-panel" style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--rs);padding:10px 16px;display:flex;align-items:center;gap:8px;box-shadow:0 2px 12px rgba(0,0,0,.5);backdrop-filter:blur(4px)">
           <span style="font-size:18px">📏</span>
@@ -684,6 +690,11 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:13px;color:var(--text2);cursor:pointer">
       <input type="checkbox" id="sync-reset-id" style="width:auto;padding:0"> Загрузить с самого начала (сброс счётчика)
     </label>
+    <div class="set-title" style="margin-bottom:8px">🗺 Регионы погрузки</div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px;color:var(--text2);cursor:pointer">
+      <input type="checkbox" id="sync-all-regions" style="width:auto;padding:0" onchange="toggleRegionFilter(this)"> Все регионы
+    </label>
+    <div id="sync-region-list" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:16px;padding-left:2px"></div>
     <div class="macts">
       <button class="bsec" onclick="closeSyncModal()">Отмена</button>
       <button class="bp" onclick="confirmSync()">Синхронизировать</button>
@@ -1142,6 +1153,40 @@ function parseTemplate(text) {
 
 // ===================== TELEGRAM SYNC =====================
 let _syncDateFrom = null, _syncDateTo = null, _syncNoFilter = false;
+let _syncAllRegions = true, _syncRegions = [];
+
+// Уникальные регионы погрузки из загруженных заявок
+function getAvailableRegions() {
+  const set = new Set(orders.filter(o => !o.trashed && o.region).map(o => o.region));
+  return [...set].sort((a, b) => a.localeCompare(b, 'ru'));
+}
+
+function renderSyncRegions() {
+  const saved = JSON.parse(localStorage.getItem('gp_sync_regions') || '[]');
+  const allChecked = localStorage.getItem('gp_sync_all') !== '0';
+  const regions = getAvailableRegions();
+  const list = document.getElementById('sync-region-list');
+  document.getElementById('sync-all-regions').checked = allChecked;
+  if (!regions.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text3);line-height:1.5">Регионы появятся после первой синхронизации. Сейчас загрузятся все.</div>';
+    return;
+  }
+  list.innerHTML = regions.map(r => {
+    const checked = allChecked || saved.includes(r) ? 'checked' : '';
+    const dis = allChecked ? 'disabled' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;opacity:${allChecked?'0.5':'1'}">
+      <input type="checkbox" class="sync-region-cb" value="${r.replace(/"/g,'&quot;')}" ${checked} ${dis} style="width:auto;padding:0"> ${r}</label>`;
+  }).join('');
+}
+
+function toggleRegionFilter(cb) {
+  // «Все регионы» включено → блокируем индивидуальный выбор
+  document.querySelectorAll('.sync-region-cb').forEach(el => {
+    el.disabled = cb.checked;
+    if (cb.checked) el.checked = true;
+    el.closest('label').style.opacity = cb.checked ? '0.5' : '1';
+  });
+}
 
 function openSyncModal() {
   const today = new Date().toISOString().split('T')[0];
@@ -1151,6 +1196,8 @@ function openSyncModal() {
   document.getElementById('sync-no-filter').checked = true;
   document.getElementById('sync-date-from').disabled = true;
   document.getElementById('sync-date-to').disabled = true;
+  document.getElementById('sync-reset-id').checked = false;
+  renderSyncRegions();
   document.getElementById('sync-modal').classList.add('open');
 }
 
@@ -1167,6 +1214,10 @@ function confirmSync() {
   _syncNoFilter = document.getElementById('sync-no-filter').checked;
   _syncDateFrom = _syncNoFilter ? null : document.getElementById('sync-date-from').value || null;
   _syncDateTo   = _syncNoFilter ? null : document.getElementById('sync-date-to').value || null;
+  _syncAllRegions = document.getElementById('sync-all-regions').checked;
+  _syncRegions = _syncAllRegions ? [] : [...document.querySelectorAll('.sync-region-cb:checked')].map(el => el.value);
+  localStorage.setItem('gp_sync_all', _syncAllRegions ? '1' : '0');
+  localStorage.setItem('gp_sync_regions', JSON.stringify(_syncRegions));
   if (document.getElementById('sync-reset-id').checked) {
     delete CFG.lastUpdateId;
     delete CFG.lastBotOrderId;
@@ -1174,6 +1225,12 @@ function confirmSync() {
   }
   closeSyncModal();
   syncOrders();
+}
+
+function orderMatchesRegions(order) {
+  if (_syncAllRegions) return true;
+  if (!order.region) return true;       // заявки без региона (Telegram) — берём всегда
+  return _syncRegions.includes(order.region);
 }
 
 function parseDateRU(str) {
@@ -1208,77 +1265,99 @@ async function syncOrders() {
   // Если есть URL бота — читаем заявки напрямую с него
   if (botUrl) {
     try {
-      // Если выбран фильтр по дате — грузим всё с начала, иначе только новые
-      const since = (!_syncNoFilter && (_syncDateFrom || _syncDateTo)) ? 0 : (CFG.lastBotOrderId || 0);
-      const res = await fetch(`${botUrl}/orders?since_id=${since}`);
-      if (!res.ok) { toast(`❌ Бот недоступен (HTTP ${res.status})`); btn.classList.remove('spinning'); btn.disabled = false; btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Синхронизировать`; return; }
-      const data = await res.json();
-      console.log('[sync] bot response:', data);
-      if (data.ok && data.orders && data.orders.length > 0) {
-        let added = 0, skippedDate = 0, skippedDup = 0;
-        const existingIds = new Set(orders.filter(o => !o.trashed).map(o => o.botOrderId).filter(Boolean));
-        const trashedIds = new Map(orders.filter(o => o.trashed && o.botOrderId).map(o => [o.botOrderId, o]));
-        // Дедупликация по содержимому (защита от дублей с разными ID на стороне бота)
-        const contentKeys = new Set(orders.filter(o => !o.trashed).map(o => `${o.from}|${o.to}|${o.cargo}|${o.priceNoVat}`));
-        const cleanAddr = v => (v && v !== 'null' && v !== 'undefined') ? v.split(',').map(s=>s.trim()).filter(s=>s&&s!=='null'&&s!=='undefined').join(', ') : '';
-        for (const apiOrder of data.orders) {
-          if (existingIds.has(apiOrder.id)) { skippedDup++; continue; }
-          // Если заявка в корзине — восстанавливаем её
-          if (trashedIds.has(apiOrder.id)) {
-            const existing = trashedIds.get(apiOrder.id);
-            if (!orderMatchesDates(existing)) { skippedDate++; continue; }
-            existing.trashed = false; delete existing.trashedAt;
-            added++;
-            continue;
-          }
-          const fromClean = cleanAddr(apiOrder.from);
-          const toClean   = cleanAddr(apiOrder.to);
-          const cargoClean = [apiOrder.cargo, apiOrder.cargoType].filter(v=>v&&v!=='null').join(' ');
-          const contentKey = `${fromClean}|${toClean}|${cargoClean}|${apiOrder.price_no_vat}`;
-          if (contentKeys.has(contentKey)) { skippedDup++; continue; }
-          contentKeys.add(contentKey);
-          const order = {
-            id: Date.now() + Math.random(),
-            botOrderId: apiOrder.id,
-            cargo: cargoClean,
-            weight: apiOrder.weight,
-            from: fromClean,
-            fromShort: fromClean.split(',')[0].trim(),
-            to: toClean,
-            toShort: toClean.split(',')[0].trim(),
-            distance: apiOrder.distance,
-            priceNoVat: apiOrder.price_no_vat,
-            priceVat: apiOrder.price_vat,
-            price: apiOrder.price_no_vat,
-            loadDate: apiOrder.load_date,
-            loadSchedule: apiOrder.schedule,
-            volumePerDay: apiOrder.volume_per_day,
-            contact: apiOrder.contact,
-            urgent: apiOrder.urgent || false,
-            source: 'Telegram AI Агент',
-            status: 'new',
-            note: '',
-            date: apiOrder.load_date || new Date().toLocaleDateString('ru', {day:'2-digit',month:'2-digit'})
-          };
-          if (!orderMatchesDates(order)) { skippedDate++; continue; }
-          orders.unshift(order);
+      // Если активен любой фильтр (дата или регион) — грузим всё с начала, иначе только новые
+      const filterActive = (!_syncNoFilter && (_syncDateFrom || _syncDateTo)) || !_syncAllRegions;
+      const since = filterActive ? 0 : (CFG.lastBotOrderId || 0);
+
+      // Тянем два источника: Telegram (из памяти бота) и свежий снимок aist24 (парсится на лету)
+      let tgData = null, aistData = null, netErr = null;
+      try {
+        const res = await fetch(`${botUrl}/orders?since_id=${since}`);
+        if (res.ok) tgData = await res.json(); else netErr = `HTTP ${res.status}`;
+      } catch(e) { netErr = e.message; }
+      try {
+        const res2 = await fetch(`${botUrl}/aist/orders`);
+        if (res2.ok) aistData = await res2.json();
+      } catch(e) { /* aist может быть не настроен на боте — не критично */ }
+      console.log('[sync] tg:', tgData, 'aist:', aistData);
+
+      let added = 0, skippedDate = 0, skippedDup = 0, skippedRegion = 0;
+      const existingIds = new Set(orders.filter(o => !o.trashed).map(o => o.botOrderId).filter(Boolean));
+      const trashedIds = new Map(orders.filter(o => o.trashed && o.botOrderId).map(o => [o.botOrderId, o]));
+      // Дедупликация по содержимому (защита от дублей с разными ID)
+      const contentKeys = new Set(orders.filter(o => !o.trashed).map(o => `${o.from}|${o.to}|${o.cargo}|${o.priceNoVat}`));
+      const cleanAddr = v => (v && v !== 'null' && v !== 'undefined') ? v.split(',').map(s=>s.trim()).filter(s=>s&&s!=='null'&&s!=='undefined').join(', ') : '';
+
+      function processApiOrder(apiOrder, isAist) {
+        if (existingIds.has(apiOrder.id)) { skippedDup++; return; }
+        // Если заявка в корзине — восстанавливаем её
+        if (trashedIds.has(apiOrder.id)) {
+          const existing = trashedIds.get(apiOrder.id);
+          if (!orderMatchesRegions(existing)) { skippedRegion++; return; }
+          if (!orderMatchesDates(existing)) { skippedDate++; return; }
+          existing.trashed = false; delete existing.trashedAt;
           added++;
-          if (apiOrder.id > (CFG.lastBotOrderId || 0)) CFG.lastBotOrderId = apiOrder.id;
+          return;
         }
-        saveCfg();
-        save(); updRegion(); renderOrders();
-        if (curTab === 'map') renderMap();
-        if (added > 0) toast(`✅ Добавлено ${added} новых заявок`);
-        else if (skippedDate > 0) toast(`📅 Найдено ${skippedDate} заявок, но они вне выбранного периода`);
-        else if (skippedDup > 0) toast(`Все заявки уже загружены (${skippedDup} дублей)`);
-        else toast('Новых заявок нет');
-      } else if (data.ok && data.orders && data.orders.length === 0) {
-        toast('На сервере нет заявок (since_id=' + since + ')');
-      } else {
-        toast('❌ Ответ бота: ' + JSON.stringify(data).slice(0, 80));
+        const fromClean = cleanAddr(apiOrder.from);
+        const toClean   = cleanAddr(apiOrder.to);
+        const cargoClean = [apiOrder.cargo, apiOrder.cargoType].filter(v=>v&&v!=='null').join(' ');
+        const contentKey = `${fromClean}|${toClean}|${cargoClean}|${apiOrder.price_no_vat}`;
+        if (contentKeys.has(contentKey)) { skippedDup++; return; }
+        contentKeys.add(contentKey);
+        const order = {
+          id: Date.now() + Math.random(),
+          botOrderId: apiOrder.id,
+          cargo: cargoClean,
+          weight: apiOrder.weight,
+          from: fromClean,
+          fromShort: fromClean.split(',')[0].trim(),
+          to: toClean,
+          toShort: toClean.split(',')[0].trim(),
+          distance: apiOrder.distance,
+          priceNoVat: apiOrder.price_no_vat,
+          priceVat: apiOrder.price_vat,
+          price: apiOrder.price_no_vat,
+          loadDate: apiOrder.load_date,
+          loadSchedule: apiOrder.schedule,
+          volumePerDay: apiOrder.volume_per_day,
+          contact: apiOrder.contact,
+          urgent: apiOrder.urgent || false,
+          source: apiOrder.source || 'Telegram AI Агент',
+          region: apiOrder.region || '',
+          origin: isAist ? 'aist' : 'telegram',
+          status: 'new',
+          note: apiOrder.note || '',
+          date: apiOrder.load_date || new Date().toLocaleDateString('ru', {day:'2-digit',month:'2-digit'})
+        };
+        if (!orderMatchesRegions(order)) { skippedRegion++; return; }
+        if (!orderMatchesDates(order)) { skippedDate++; return; }
+        orders.unshift(order);
+        added++;
+        // Счётчик since двигаем только для Telegram в обычном режиме (aist — снимок, не инкремент)
+        if (!isAist && !filterActive && apiOrder.id > (CFG.lastBotOrderId || 0)) CFG.lastBotOrderId = apiOrder.id;
       }
+
+      const tgOrders = (tgData && tgData.ok && tgData.orders) ? tgData.orders : [];
+      const aiOrders = (aistData && aistData.ok && aistData.orders) ? aistData.orders : [];
+      tgOrders.forEach(o => processApiOrder(o, false));
+      aiOrders.forEach(o => processApiOrder(o, true));
+
+      saveCfg();
+      save(); updRegion(); renderOrders();
+      if (curTab === 'map') renderMap();
+
+      const aistErrMap = { login_failed: 'aist24: не удалось войти — проверь логин/пароль', fetch_failed: 'aist24: не удалось прочитать заявки' };
+      const aistErr = (aistData && !aistData.ok && aistData.error && aistData.error !== 'not_configured') ? (aistErrMap[aistData.error] || ('aist24: ' + aistData.error)) : null;
+      if (added > 0) toast(`✅ Добавлено ${added} новых заявок`);
+      else if (skippedRegion > 0) toast(`🗺 ${skippedRegion} заявок отсеяно по фильтру регионов`);
+      else if (skippedDate > 0) toast(`📅 Найдено ${skippedDate} заявок, но они вне выбранного периода`);
+      else if (skippedDup > 0) toast(`Все заявки уже загружены (${skippedDup} дублей)`);
+      else if (aistErr) toast('❌ ' + aistErr);
+      else if (netErr) toast('❌ Бот недоступен: ' + netErr);
+      else toast('Новых заявок нет');
     } catch(e) {
-      toast('❌ Ошибка подключения к боту: ' + e.message);
+      toast('❌ Ошибка синхронизации: ' + e.message);
     }
     btn.classList.remove('spinning');
     btn.disabled = false;
@@ -1373,6 +1452,7 @@ async function syncOrders() {
         const order = parsedToOrder(parsed, `Telegram (ID:${chatId})`);
         order.tgMsgId = msg.msgId;
         order.rawText = msg.text;
+        if (!orderMatchesRegions(order)) continue;
         if (!orderMatchesDates(order)) continue;
         orders.unshift(order);
         added++;
@@ -1613,6 +1693,17 @@ async function testParse() {
 // ===================== ДАННЫЕ =====================
 const BADGEMAP = { 'пшениц':'bg','ячмень':'bg','рожь':'bg','подсолнечник':'bg','кукуруз':'bc','сахар':'bc','щебень':'bgr','гравий':'bgr','песок':'bs','уголь':'bco' };
 function getBadge(c){ if(!c)return 'bgr'; const l=c.toLowerCase(); for(const k in BADGEMAP){ if(l.includes(k))return BADGEMAP[k]; } return 'bgr'; }
+
+// Источник заявки (для цветовой маркировки). origin проставляется при создании; для старых — по source
+const ORIGIN_COLORS = { aist:'#4a9eff', telegram:'#f0a500', manual:'#9b6dff' };
+const ORIGIN_LABELS = { aist:'АИСТ', telegram:'Telegram', manual:'Вручную' };
+function orderOrigin(o){
+  if(o.origin) return o.origin;
+  const s = (o.source||'').toLowerCase();
+  if(s.includes('прямая заявка') || s.includes('аист') || s.includes('aist')) return 'aist';
+  if(s.includes('вручную')) return 'manual';
+  return 'telegram';
+}
 
 let orders = JSON.parse(localStorage.getItem('gp_orders') || '[]');
 let map = null, mapOk = false, curTab = 'list';
@@ -1917,13 +2008,17 @@ async function _renderMapAsync(){
   Object.values(groups).forEach(group => {
     const fc = group.coords;
     const orders = group.orders;
-    // Цвет по приоритету: срочная > взята > обычная
-    const col = orders.some(o=>o.urgent) ? '#e05050' :
-                orders.every(o=>o.status==='done'||o.status==='taken') ? '#3dba7a' : '#f0a500';
+    // Цвет по источнику заявки (АИСТ / Telegram / вручную)
+    const origins = [...new Set(orders.map(orderOrigin))];
+    const col = origins.length === 1 ? (ORIGIN_COLORS[origins[0]] || '#f0a500') : '#f0a500';
+    // Срочные выделяем красной обводкой (источник остаётся в цвете заливки)
+    const hasUrgent = orders.some(o=>o.urgent);
+    const ringCol = hasUrgent ? '#e05050' : '#fff';
+    const ringW = hasUrgent ? 3 : 2;
     const size = orders.length > 1 ? 18 : 14;
     const icon = L.divIcon({
       className:'',
-      html:`<div style="width:${size}px;height:${size}px;border-radius:50%;background:${col};border:2px solid #fff;box-shadow:0 0 8px ${col}88;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">${orders.length>1?orders.length:''}</div>`,
+      html:`<div style="width:${size}px;height:${size}px;border-radius:50%;background:${col};border:${ringW}px solid ${ringCol};box-shadow:0 0 8px ${col}88;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">${orders.length>1?orders.length:''}</div>`,
       iconSize:[size,size], iconAnchor:[size/2,size/2]
     });
 
@@ -2301,6 +2396,7 @@ function addOrder(){
     loadDate: df, date: df,
     contact: document.getElementById('mcontact').value.trim(),
     source: document.getElementById('msource').value.trim()||'Вручную',
+    origin: 'manual',
     note: document.getElementById('mnote').value.trim(),
     urgent: document.getElementById('murgent').checked,
     status: 'new'

@@ -679,7 +679,7 @@ select,input{background:var(--bg3);color:var(--text);border:1px solid var(--bord
   <div class="mdl">
     <div class="mh"></div>
     <h3>📅 Период загрузки заявок</h3>
-    <p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5">Будут загружены заявки с датой погрузки в указанном периоде. Заявки без даты загружаются всегда.</p>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5">Фильтр дат действует только для заявок из Telegram. Заявки с АИСТ загружаются все, что есть на сайте.</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="mf"><label>Дата с</label><input type="date" id="sync-date-from"></div>
       <div class="mf"><label>Дата по</label><input type="date" id="sync-date-to"></div>
@@ -1294,7 +1294,7 @@ async function syncOrders() {
         if (trashedIds.has(apiOrder.id)) {
           const existing = trashedIds.get(apiOrder.id);
           if (!orderMatchesRegions(existing)) { skippedRegion++; return; }
-          if (!orderMatchesDates(existing)) { skippedDate++; return; }
+          if (!isAist && !orderMatchesDates(existing)) { skippedDate++; return; }
           existing.trashed = false; delete existing.trashedAt;
           added++;
           return;
@@ -1331,7 +1331,8 @@ async function syncOrders() {
           date: apiOrder.load_date || new Date().toLocaleDateString('ru', {day:'2-digit',month:'2-digit'})
         };
         if (!orderMatchesRegions(order)) { skippedRegion++; return; }
-        if (!orderMatchesDates(order)) { skippedDate++; return; }
+        // Фильтр дат — только для Telegram; с aist берём все заявки что есть на сайте
+        if (!isAist && !orderMatchesDates(order)) { skippedDate++; return; }
         orders.unshift(order);
         added++;
         // Счётчик since двигаем только для Telegram в обычном режиме (aist — снимок, не инкремент)
